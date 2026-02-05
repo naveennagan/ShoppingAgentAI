@@ -69,7 +69,7 @@ export async function POST(req: Request) {
         }
 
         const model = genAI.getGenerativeModel({
-            model: 'gemini-flash-latest',
+            model: 'gemini-2.5-flash',
             generationConfig: { responseMimeType: "application/json" }
         });
 
@@ -106,6 +106,13 @@ export async function POST(req: Request) {
             return NextResponse.json({
                 action: 'NONE',
                 message: "I'm receiving too many requests right now. Please try again in a minute."
+            });
+        }
+
+        if (error.message?.includes('fetch failed')) {
+            return NextResponse.json({
+                action: 'NONE',
+                message: "Network error: Unable to reach Gemini API. Check your network/proxy settings."
             });
         }
 

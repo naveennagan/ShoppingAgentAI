@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCart } from '@/context/CartContext';
 import { MessageCircle, X, Send, Sparkles, User, Bot } from 'lucide-react';
+import { apiClient } from '@/lib/api-client';
 
 export default function AiChatWidget() {
     const [isOpen, setIsOpen] = useState(false);
@@ -42,18 +43,11 @@ export default function AiChatWidget() {
                 text: m.text
             }));
 
-            const res = await fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: userInput, history })
-            });
-
-            const data = await res.json();
+            const data = await apiClient.chat(userInput, history);
 
             if (data.action === 'NAVIGATE' && data.payload) {
                 router.push(data.payload);
             } else if (data.action === 'ADD_TO_CART' && data.payload) {
-                // We need to fetch the full product object to add it
                 const productToAdd = (await import('@/lib/products')).products.find(p => String(p.id) === String(data.payload));
                 if (productToAdd) {
                     addToCart(productToAdd);
