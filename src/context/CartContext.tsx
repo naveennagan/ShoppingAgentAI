@@ -3,6 +3,30 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Product } from '@/lib/products';
 
+function generateSuggestion(product: Product, currentCart: CartItem[]): string | null {
+    // Laptop suggestions
+    if (product.category === 'Electronics' && product.name.includes('Laptop')) {
+        return "Great choice! Consider adding a Mechanical Gaming Keyboard ($129.99) and Precision Wireless Mouse ($79.99) to complete your setup.";
+    }
+    
+    // Phone suggestions
+    if (product.id === 'ph-1') {
+        return "Nice! Add the Ultra Smart Fitness Watch and get $50 off! Perfect combo for staying connected.";
+    }
+    
+    // Desk suggestions
+    if (product.id === 'fur-2') {
+        return "Perfect! Add the Ergonomic Mesh Chair and get 20% off as part of our Work From Home Bundle!";
+    }
+    
+    // Headphones suggestions
+    if (product.id === '1') {
+        return "Excellent choice! Enjoy 10% off as part of our Audiophile Starter deal.";
+    }
+    
+    return null;
+}
+
 export interface CartItem {
     product: Product;
     quantity: number;
@@ -54,6 +78,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
                         : item
                 );
             }
+            
+            // Trigger AI suggestion
+            setTimeout(() => {
+                const suggestion = generateSuggestion(product, prev);
+                if (suggestion) {
+                    window.dispatchEvent(new CustomEvent('ai-suggestion', { detail: { suggestion } }));
+                }
+            }, 500);
+            
             return [...prev, { product, quantity: 1 }];
         });
     };
