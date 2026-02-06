@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCart } from '@/context/CartContext';
 import { MessageCircle, X, Send, Sparkles, User, Bot } from 'lucide-react';
+import { AIShoppingAssistant } from '../../packages/ai-shopping-assistant/src';
 
 export default function AiChatWidget() {
     const [isOpen, setIsOpen] = useState(false);
@@ -12,10 +13,52 @@ export default function AiChatWidget() {
     ]);
     const [input, setInput] = useState('');
     const [isTyping, setIsTyping] = useState(false);
+    const [assistant, setAssistant] = useState<AIShoppingAssistant | null>(null);
 
     const router = useRouter();
-    const { addToCart, clearCart } = useCart();
+    const { addToCart, clearCart, items: cart } = useCart();
     const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const initAssistant = async () => {
+            const ai = new AIShoppingAssistant({
+                apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY || '',
+                autoDetectContext: true,
+                
+                dataProviders: {
+                    products: async () => {
+                        const { products } = await import('@/lib/products');
+                        return products;
+                    },
+                    cart: async () => cart
+                },
+                
+                actions: {
+                    navigate: (path: any) => {
+                        const url = typeof path === 'string' ? path : path?.url || path?.path || '/checkout';
+                        router.push(url);
+                    },
+                    add_to_cart: async (productId: string) => {
+                        const { products } = await import('@/lib/products');
+                        const product = products.find(p => String(p.id) === String(productId));
+                        if (product) addToCart(product);
+                    },
+                    clear_cart: () => {
+                        clearCart();
+                    },
+                    autofill_checkout: (data: any) => {
+                        const event = new CustomEvent('autofill-checkout', { detail: data });
+                        window.dispatchEvent(event);
+                    }
+                }
+            });
+            
+            await ai.initialize();
+            setAssistant(ai);
+        };
+        
+        initAssistant();
+    }, [router, addToCart, clearCart, cart]);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -27,57 +70,25 @@ export default function AiChatWidget() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!input.trim()) return;
+        if (!input.trim() || !assistant) return;
 
-        // Add user message
-        const newMessages = [...messages, { role: 'user' as const, text: input }];
-        setMessages(newMessages);
-        const userInput = input;
+        const userMessage = { role: 'user' as const, text: input };
+        setMessages(prev => [...prev, userMessage]);
         setInput('');
         setIsTyping(true);
 
         try {
-            const history = newMessages.slice(-10).map(m => ({
-                role: m.role,
-                text: m.text
-            }));
-
-            const res = await fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: userInput, history })
-            });
-
-            const data = await res.json();
-
-            if (data.action === 'NAVIGATE' && data.payload) {
-                router.push(data.payload);
-            } else if (data.action === 'ADD_TO_CART' && data.payload) {
-                // We need to fetch the full product object to add it
-                const productToAdd = (await import('@/lib/products')).products.find(p => String(p.id) === String(data.payload));
-                if (productToAdd) {
-                    addToCart(productToAdd);
-                }
-            } else if (data.action === 'CLEAR_CART') {
-                clearCart();
-            } else if (data.action === 'AUTOFILL_CHECKOUT') {
-                let detail = {};
-                try {
-                    if (data.payload) {
-                        detail = JSON.parse(data.payload);
-                    }
-                } catch (e) {
-                    console.error("Failed to parse autofill payload", e);
-                }
-                const event = new CustomEvent('autofill-checkout', { detail });
-                window.dispatchEvent(event);
-            }
-
-            setMessages(prev => [...prev, { role: 'ai', text: data.message }]);
-
+            const history = messages.slice(-10);
+            
+            // Update cart context before each message
+            assistant.updateContext({ data: { cart } });
+            
+            const response = await assistant.chat(input, history);
+            
+            setMessages(prev => [...prev, { role: 'ai', text: response.message }]);
         } catch (error) {
             console.error('Chat error:', error);
-            setMessages(prev => [...prev, { role: 'ai', text: "Sorry, I encountered network issue. Please check your connection." }]);
+            setMessages(prev => [...prev, { role: 'ai', text: "Sorry, I encountered an issue. Please try again." }]);
         } finally {
             setIsTyping(false);
         }
@@ -107,7 +118,6 @@ export default function AiChatWidget() {
                     backdropFilter: 'blur(10px)',
                     border: '1px solid var(--border)'
                 }}>
-                    {/* Header */}
                     <div style={{
                         padding: '1rem',
                         background: 'linear-gradient(135deg, var(--primary), var(--accent))',
@@ -120,12 +130,11 @@ export default function AiChatWidget() {
                             <Sparkles size={18} />
                             <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>AI Assistant</h3>
                         </div>
-                        <button onClick={() => setIsOpen(false)} style={{ color: 'white', opacity: 0.8 }}>
+                        <button onClick={() => setIsOpen(false)} style={{ color: 'white', opacity: 1, background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px' }}>
                             <X size={20} />
                         </button>
                     </div>
 
-                    {/* Messages */}
                     <div style={{
                         flex: 1,
                         overflowY: 'auto',
@@ -174,7 +183,6 @@ export default function AiChatWidget() {
                         <div ref={messagesEndRef} />
                     </div>
 
-                    {/* Input */}
                     <form onSubmit={handleSubmit} style={{
                         padding: '1rem',
                         borderTop: '1px solid var(--border)',

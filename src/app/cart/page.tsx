@@ -84,7 +84,16 @@ export default function CartPage() {
                                 </div>
                                 <button
                                     onClick={() => removeFromCart(product.id)}
-                                    style={{ color: 'var(--secondary)', fontSize: '0.8rem', fontWeight: 500, textDecoration: 'underline' }}
+                                    className="btn"
+                                    style={{ 
+                                        color: '#ef4444', 
+                                        fontSize: '0.85rem', 
+                                        fontWeight: 500,
+                                        padding: '0.25rem 0.75rem',
+                                        border: '1px solid #fecaca',
+                                        background: '#fef2f2',
+                                        borderRadius: '6px'
+                                    }}
                                 >
                                     Remove
                                 </button>
@@ -94,7 +103,18 @@ export default function CartPage() {
 
                     <button
                         onClick={clearCart}
-                        style={{ alignSelf: 'flex-start', color: '#6b7280', textDecoration: 'underline', marginTop: '1rem' }}
+                        className="btn"
+                        style={{ 
+                            alignSelf: 'flex-start', 
+                            color: '#6b7280',
+                            marginTop: '1rem',
+                            padding: '0.5rem 1rem',
+                            border: '1px solid #d1d5db',
+                            background: 'white',
+                            borderRadius: '8px',
+                            fontSize: '0.9rem',
+                            fontWeight: 500
+                        }}
                     >
                         Clear Cart
                     </button>
