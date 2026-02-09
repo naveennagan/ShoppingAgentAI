@@ -1,7 +1,8 @@
-import { products } from '@/lib/products';
+import { apiClient } from '@/lib/api-client';
 import ProductCard from '@/components/ProductCard';
 
-export default function ProductsPage() {
+export default async function ProductsPage() {
+    const products = await apiClient.getProducts();
     return (
         <main className="container" style={{ paddingBottom: '4rem' }}>
             <header style={{ marginBottom: '3rem', marginTop: '2rem', textAlign: 'center' }}>

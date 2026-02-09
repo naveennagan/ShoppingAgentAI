@@ -1,12 +1,7 @@
-import { products } from '@/lib/products';
+import { apiClient } from '@/lib/api-client';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import AddToCartButton from '@/components/AddToCartButton';
-
-// In Next.js App Router, params is a Promise in recent versions, or just params object. 
-// For safety with latest Next.js 15+, we need to handle params as a Promise if it's dynamic.
-// However, in standard Next 14/15 typings for Page props, it depends. 
-// I will assume standard PageProps interface but creating a typesafe way.
 
 interface PageProps {
     params: Promise<{ id: string }>;
@@ -14,7 +9,7 @@ interface PageProps {
 
 export default async function ProductPage({ params }: PageProps) {
     const { id } = await params;
-    const product = products.find(p => p.id === id);
+    const product = await apiClient.getProductById(id);
 
     if (!product) {
         notFound();

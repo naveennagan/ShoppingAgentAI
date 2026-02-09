@@ -4,20 +4,45 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCart } from '@/context/CartContext';
 import { MessageCircle, X, Send, Sparkles, User, Bot } from 'lucide-react';
+import { apiClient } from '@/lib/api-client';
 
 
 export default function AiChatWidget() {
     const [isOpen, setIsOpen] = useState(false);
-    const [messages, setMessages] = useState<{ role: 'user' | 'ai', text: string }[]>([
-        { role: 'ai', text: 'Hi! I can help you find products or check your order. Try saying "Show me headphones".' }
-    ]);
+    const [messages, setMessages] = useState<{ role: 'user' | 'ai', text: string }[]>([]);
     const [input, setInput] = useState('');
     const [isTyping, setIsTyping] = useState(false);
-
+    const [sessionId] = useState(() => {
+        if (typeof window !== 'undefined') {
+            return localStorage.getItem('sessionId') || 'session_' + Date.now();
+        }
+        return 'session_default';
+    });
 
     const router = useRouter();
     const { addToCart, clearCart, items: cart } = useCart();
     const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    // Load chat history on mount
+    useEffect(() => {
+        const loadHistory = async () => {
+            try {
+                const history = await apiClient.getChatHistory(sessionId);
+                if (history.messages && history.messages.length > 0) {
+                    setMessages(history.messages.map(m => ({
+                        role: m.role as 'user' | 'ai',
+                        text: m.text
+                    })));
+                } else {
+                    setMessages([{ role: 'ai', text: 'Hi! I can help you find products or check your order. Try saying "Show me headphones".' }]);
+                }
+            } catch (error) {
+                console.error('Failed to load chat history:', error);
+                setMessages([{ role: 'ai', text: 'Hi! I can help you find products or check your order. Try saying "Show me headphones".' }]);
+            }
+        };
+        loadHistory();
+    }, [sessionId]);
 
 
 
@@ -35,25 +60,27 @@ export default function AiChatWidget() {
 
         const userMessage = { role: 'user' as const, text: input };
         setMessages(prev => [...prev, userMessage]);
+        
+        // Save user message to backend
+        try {
+            await apiClient.addChatMessage(sessionId, 'user', input);
+        } catch (error) {
+            console.error('Failed to save user message:', error);
+        }
+        
         setInput('');
         setIsTyping(true);
 
         try {
             const history = messages.slice(-10);
             
-            const response = await fetch('http://localhost:8080/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: input, history })
-            });
-            
-            const data = await response.json();
+            const data = await apiClient.chat(input, history);
             
             // Handle actions
             if (data.action === 'NAVIGATE' && data.payload) {
                 router.push(data.payload);
             } else if (data.action === 'ADD_TO_CART' && data.payload) {
-                const { products } = await import('@/lib/products');
+                const products = await apiClient.getProducts();
                 const product = products.find(p => String(p.id) === String(data.payload));
                 if (product) addToCart(product);
             } else if (data.action === 'CLEAR_CART') {
@@ -64,6 +91,13 @@ export default function AiChatWidget() {
             }
             
             setMessages(prev => [...prev, { role: 'ai', text: data.message }]);
+            
+            // Save AI message to backend
+            try {
+                await apiClient.addChatMessage(sessionId, 'ai', data.message);
+            } catch (error) {
+                console.error('Failed to save AI message:', error);
+            }
         } catch (error) {
             console.error('Chat error:', error);
             setMessages(prev => [...prev, { role: 'ai', text: "Sorry, I encountered an issue. Please try again." }]);

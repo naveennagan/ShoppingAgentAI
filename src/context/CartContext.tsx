@@ -2,6 +2,13 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Product } from '@/lib/products';
+import { apiClient } from '@/lib/api-client';
+
+const SESSION_ID = typeof window !== 'undefined' ? (localStorage.getItem('sessionId') || (() => {
+    const id = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    localStorage.setItem('sessionId', id);
+    return id;
+})()) : 'session_default';
 
 async function generateAISuggestion(product: Product, currentCart: CartItem[]): Promise<void> {
     try {
@@ -51,62 +58,77 @@ export function CartProvider({ children }: { children: ReactNode }) {
     const [items, setItems] = useState<CartItem[]>([]);
     const [isInitialized, setIsInitialized] = useState(false);
 
-    // Load from local storage on mount (optional, keeping simple for now but good for persistence)
+    // Load cart from backend on mount
     useEffect(() => {
-        const saved = localStorage.getItem('cart');
-        if (saved) {
+        const loadCart = async () => {
             try {
-                setItems(JSON.parse(saved));
-            } catch (e) {
-                console.error('Failed to parse cart', e);
+                const backendCart = await apiClient.getCart(SESSION_ID);
+                const products = await apiClient.getProducts();
+                
+                const cartItems: CartItem[] = backendCart.items.map(item => {
+                    const product = products.find(p => p.id === item.productId);
+                    return product ? { product, quantity: item.quantity } : null;
+                }).filter(Boolean) as CartItem[];
+                
+                setItems(cartItems);
+            } catch (error) {
+                console.error('Failed to load cart:', error);
             }
-        }
-        setIsInitialized(true);
+            setIsInitialized(true);
+        };
+        loadCart();
     }, []);
 
-    // Save to local storage
-    useEffect(() => {
-        if (isInitialized) {
-            localStorage.setItem('cart', JSON.stringify(items));
+    const addToCart = async (product: Product) => {
+        try {
+            await apiClient.addToCart(SESSION_ID, product.id, 1);
+            setItems(prev => {
+                const existing = prev.find(item => item.product.id === product.id);
+                if (existing) {
+                    return prev.map(item =>
+                        item.product.id === product.id
+                            ? { ...item, quantity: item.quantity + 1 }
+                            : item
+                    );
+                }
+                return [...prev, { product, quantity: 1 }];
+            });
+        } catch (error) {
+            console.error('Failed to add to cart:', error);
         }
-    }, [items, isInitialized]);
-
-    const addToCart = (product: Product) => {
-        setItems(prev => {
-            const existing = prev.find(item => item.product.id === product.id);
-            if (existing) {
-                return prev.map(item =>
-                    item.product.id === product.id
-                        ? { ...item, quantity: item.quantity + 1 }
-                        : item
-                );
-            }
-            
-            // Trigger AI suggestion (disabled due to quota limits)
-            // setTimeout(() => {
-            //     generateAISuggestion(product, prev);
-            // }, 500);
-            
-            return [...prev, { product, quantity: 1 }];
-        });
     };
 
-    const removeFromCart = (productId: string) => {
-        setItems(prev => prev.filter(item => item.product.id !== productId));
+    const removeFromCart = async (productId: string) => {
+        try {
+            await apiClient.removeFromCart(SESSION_ID, productId);
+            setItems(prev => prev.filter(item => item.product.id !== productId));
+        } catch (error) {
+            console.error('Failed to remove from cart:', error);
+        }
     };
 
-    const clearCart = () => {
-        setItems([]);
+    const clearCart = async () => {
+        try {
+            await apiClient.clearCart(SESSION_ID);
+            setItems([]);
+        } catch (error) {
+            console.error('Failed to clear cart:', error);
+        }
     };
 
-    const updateQuantity = (productId: string, quantity: number) => {
+    const updateQuantity = async (productId: string, quantity: number) => {
         if (quantity < 1) {
             removeFromCart(productId);
             return;
         }
-        setItems(prev => prev.map(item =>
-            item.product.id === productId ? { ...item, quantity } : item
-        ));
+        try {
+            await apiClient.addToCart(SESSION_ID, productId, quantity - (items.find(i => i.product.id === productId)?.quantity || 0));
+            setItems(prev => prev.map(item =>
+                item.product.id === productId ? { ...item, quantity } : item
+            ));
+        } catch (error) {
+            console.error('Failed to update quantity:', error);
+        }
     };
 
     const total = items.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);

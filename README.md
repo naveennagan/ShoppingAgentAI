@@ -60,14 +60,29 @@ Frontend runs on http://localhost:3000
 
 ## API Endpoints
 
-### Backend (Spring Boot)
+### Products
 - `GET /api/products` - Get all products
 - `GET /api/products/{id}` - Get product by ID
+
+### Cart (Session-based)
+- `GET /api/cart/{sessionId}` - Get cart
+- `POST /api/cart/{sessionId}/add?productId=X&quantity=1` - Add to cart
+- `DELETE /api/cart/{sessionId}/remove/{productId}` - Remove from cart
+- `DELETE /api/cart/{sessionId}/clear` - Clear cart
+- `PUT /api/cart/{sessionId}/update?productId=X&quantity=2` - Update quantity
+
+### Chat
 - `POST /api/chat` - AI chat endpoint
+
+### Chat History (Session-based)
+- `GET /api/chat-history/{sessionId}` - Get chat history
+- `POST /api/chat-history/{sessionId}/add?role=user&text=hello` - Add message
+- `DELETE /api/chat-history/{sessionId}/clear` - Clear history
 
 **Example:**
 ```bash
 curl http://localhost:8080/api/products
+curl -X POST "http://localhost:8080/api/cart/session_123/add?productId=ph-1&quantity=1"
 curl -X POST http://localhost:8080/api/chat \
   -H "Content-Type: application/json" \
   -d '{"message":"Show me phones","history":[]}'
@@ -77,10 +92,25 @@ curl -X POST http://localhost:8080/api/chat \
 
 - 🛍️ Product browsing and search
 - 🤖 AI-powered shopping assistant (Gemini)
-- 🛒 Shopping cart management
+- 🛒 Shopping cart management (backend storage)
+- 💬 Persistent chat history (backend storage)
 - 💳 Checkout with AI autofill
 - 📦 Order tracking
 - 🎨 Responsive UI design
+- 📊 API call logging
+
+## Data Storage
+
+### Backend (In-Memory)
+- **Products**: 24 products stored in `ProductService`
+- **Cart**: Session-based cart in `ConcurrentHashMap`
+- **Chat History**: Session-based messages in `ConcurrentHashMap`
+
+⚠️ **Note**: All data is in-memory and will be lost on server restart. No database configured.
+
+### Frontend
+- **Session ID**: Generated and stored in browser localStorage
+- **UI State**: React Context for real-time updates
 
 ## Tech Stack
 
@@ -98,6 +128,7 @@ curl -X POST http://localhost:8080/api/chat \
 - Maven
 - Lombok
 - Gson
+- SLF4J Logging
 
 ## Project Structure
 
@@ -105,53 +136,48 @@ curl -X POST http://localhost:8080/api/chat \
 ShoppingAgentAI/
 ├── src/                          # Next.js frontend
 │   ├── app/                      # Pages and routes
-│   │   ├── api/chat/             # (Deprecated - now uses backend)
 │   │   ├── cart/                 # Cart page
 │   │   ├── checkout/             # Checkout page
 │   │   ├── products/             # Product pages
 │   │   └── tracking/             # Order tracking
-│   ├── components/               # React components
-│   │   ├── AiChatWidget.tsx      # Floating chat widget
-│   │   ├── Navbar.tsx            # Navigation bar
-│   │   ├── ProductCard.tsx       # Product display card
-│   │   └── Providers.tsx         # Context providers
+│   ├── components/
+│   │   ├── AiChatWidget.tsx      # Chat widget (uses backend)
+│   │   ├── Navbar.tsx
+│   │   └── ProductCard.tsx
 │   ├── context/
-│   │   └── CartContext.tsx       # Cart state management
+│   │   └── CartContext.tsx       # Cart state (uses backend API)
 │   └── lib/
 │       ├── api-client.ts         # Backend API client
-│       ├── products.ts           # Product data (frontend)
-│       └── agent/intents.ts      # AI intent detection
+│       └── products.ts           # TypeScript interfaces
 │
 ├── shopping-agent-backend/       # Spring Boot backend
 │   ├── src/main/java/com/shoppingagent/
 │   │   ├── controller/
-│   │   │   ├── ChatController.java       # /api/chat endpoint
-│   │   │   └── ProductController.java    # /api/products endpoint
+│   │   │   ├── ChatController.java           # AI chat
+│   │   │   ├── ProductController.java        # Products
+│   │   │   ├── CartController.java           # Cart management
+│   │   │   └── ChatHistoryController.java    # Chat history
 │   │   ├── service/
-│   │   │   ├── GeminiService.java        # Gemini AI integration
-│   │   │   └── ProductService.java       # Product business logic
+│   │   │   ├── GeminiService.java            # Gemini AI
+│   │   │   ├── ProductService.java           # 24 products
+│   │   │   ├── CartService.java              # Cart logic
+│   │   │   └── ChatHistoryService.java       # Chat storage
 │   │   ├── model/
-│   │   │   ├── Product.java              # Product entity
-│   │   │   ├── ChatRequest.java          # Chat request DTO
-│   │   │   └── ChatResponse.java         # Chat response DTO
-│   │   └── ShoppingAgentApplication.java # Main Spring Boot app
+│   │   │   ├── Product.java
+│   │   │   ├── Cart.java
+│   │   │   ├── ChatHistory.java
+│   │   │   ├── ChatRequest.java
+│   │   │   └── ChatResponse.java
+│   │   └── ShoppingAgentApplication.java
 │   ├── src/main/resources/
 │   │   ├── application.properties        # Config (gitignored)
-│   │   └── application.properties.example # Config template
-│   ├── pom.xml                           # Maven dependencies
-│   └── README.md                         # Backend docs
-│
-├── packages/
-│   └── ai-shopping-assistant/    # Standalone AI package
-│       └── src/
-│           ├── AIShoppingAssistant.ts
-│           ├── ContextExtractor.ts
-│           └── useAIAssistant.ts
+│   │   └── application.properties.example
+│   └── pom.xml
 │
 ├── .env.local                    # Frontend env (gitignored)
-├── .env.local.example            # Frontend env template
-├── package.json                  # Frontend dependencies
-└── README.md                     # This file
+├── .gitignore                    # Ignores: .env*, application.properties, packages/
+├── package.json
+└── README.md
 ```
 
 ## Development
@@ -171,27 +197,41 @@ npm run dev
 
 Open http://localhost:3000 in your browser.
 
+**Watch logs:** Backend terminal shows all API calls with details.
+
+## Logging
+
+Backend logs all API calls:
+```
+INFO  ProductController - GET /api/products - Fetching all products
+INFO  ProductController - Returning 24 products
+INFO  CartController - POST /api/cart/session_123/add - Adding product: ph-1 (qty: 1)
+INFO  CartController - Cart now has 1 items
+INFO  ChatController - POST /api/chat - Message: Show me phones
+INFO  ChatController - AI Response - Action: NONE, Message: We have several...
+```
+
 ## Troubleshooting
 
 **Port already in use:**
 ```bash
-# Kill process on port 8080
-kill -9 $(lsof -ti:8080)
-
-# Kill process on port 3000
-kill -9 $(lsof -ti:3000)
+kill -9 $(lsof -ti:8080)  # Backend
+kill -9 $(lsof -ti:3000)  # Frontend
 ```
 
 **Maven plugin error:**
 Ensure `pom.xml` has Spring Boot plugin version specified.
 
 **Network/Proxy issues:**
-If behind corporate proxy, the backend handles SSL bypass for Gemini API calls.
+Backend handles SSL bypass for Gemini API calls.
 
 **API Key leaked:**
 1. Get new key from [Google AI Studio](https://aistudio.google.com/app/apikey)
 2. Never commit `application.properties` or `.env.local`
 3. Use environment variables: `export GEMINI_API_KEY=your_key`
+
+**Cart/Chat not persisting:**
+Data is in-memory only. Restart backend = data lost. Add database for persistence.
 
 ## License
 
