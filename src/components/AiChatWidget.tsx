@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCart } from '@/context/CartContext';
 import { MessageCircle, X, Send, Sparkles, User, Bot } from 'lucide-react';
-import { AIShoppingAssistant } from '../../packages/ai-shopping-assistant/src';
+
 
 export default function AiChatWidget() {
     const [isOpen, setIsOpen] = useState(false);
@@ -13,52 +13,13 @@ export default function AiChatWidget() {
     ]);
     const [input, setInput] = useState('');
     const [isTyping, setIsTyping] = useState(false);
-    const [assistant, setAssistant] = useState<AIShoppingAssistant | null>(null);
+
 
     const router = useRouter();
     const { addToCart, clearCart, items: cart } = useCart();
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    useEffect(() => {
-        const initAssistant = async () => {
-            const ai = new AIShoppingAssistant({
-                apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY || '',
-                autoDetectContext: true,
-                
-                dataProviders: {
-                    products: async () => {
-                        const { products } = await import('@/lib/products');
-                        return products;
-                    },
-                    cart: async () => cart
-                },
-                
-                actions: {
-                    navigate: (path: any) => {
-                        const url = typeof path === 'string' ? path : path?.url || path?.path || '/checkout';
-                        router.push(url);
-                    },
-                    add_to_cart: async (productId: string) => {
-                        const { products } = await import('@/lib/products');
-                        const product = products.find(p => String(p.id) === String(productId));
-                        if (product) addToCart(product);
-                    },
-                    clear_cart: () => {
-                        clearCart();
-                    },
-                    autofill_checkout: (data: any) => {
-                        const event = new CustomEvent('autofill-checkout', { detail: data });
-                        window.dispatchEvent(event);
-                    }
-                }
-            });
-            
-            await ai.initialize();
-            setAssistant(ai);
-        };
-        
-        initAssistant();
-    }, [router, addToCart, clearCart, cart]);
+
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -70,7 +31,7 @@ export default function AiChatWidget() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!input.trim() || !assistant) return;
+        if (!input.trim()) return;
 
         const userMessage = { role: 'user' as const, text: input };
         setMessages(prev => [...prev, userMessage]);
@@ -80,12 +41,29 @@ export default function AiChatWidget() {
         try {
             const history = messages.slice(-10);
             
-            // Update cart context before each message
-            assistant.updateContext({ data: { cart } });
+            const response = await fetch('http://localhost:8080/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: input, history })
+            });
             
-            const response = await assistant.chat(input, history);
+            const data = await response.json();
             
-            setMessages(prev => [...prev, { role: 'ai', text: response.message }]);
+            // Handle actions
+            if (data.action === 'NAVIGATE' && data.payload) {
+                router.push(data.payload);
+            } else if (data.action === 'ADD_TO_CART' && data.payload) {
+                const { products } = await import('@/lib/products');
+                const product = products.find(p => String(p.id) === String(data.payload));
+                if (product) addToCart(product);
+            } else if (data.action === 'CLEAR_CART') {
+                clearCart();
+            } else if (data.action === 'AUTOFILL_CHECKOUT' && data.payload) {
+                const event = new CustomEvent('autofill-checkout', { detail: JSON.parse(data.payload) });
+                window.dispatchEvent(event);
+            }
+            
+            setMessages(prev => [...prev, { role: 'ai', text: data.message }]);
         } catch (error) {
             console.error('Chat error:', error);
             setMessages(prev => [...prev, { role: 'ai', text: "Sorry, I encountered an issue. Please try again." }]);
