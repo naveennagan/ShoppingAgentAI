@@ -1,7 +1,8 @@
 import Link from 'next/link';
-import { products } from '@/lib/products';
+import { apiClient } from '@/lib/api-client';
 
-export default function Home() {
+export default async function Home() {
+  const products = await apiClient.getProducts();
   const featuredProducts = products.slice(0, 6);
 
   return (
