@@ -6,19 +6,30 @@ import { useCart } from '@/context/CartContext';
 import { X, Send, Sparkles, User, Bot } from 'lucide-react';
 import { AIShoppingAssistant } from '../../packages/ai-shopping-assistant/src';
 
+/** Props for the AI Chat Panel component */
 interface AiChatPanelProps {
     isOpen: boolean;
     onClose: () => void;
     onWidthChange: (width: number) => void;
 }
 
+/**
+ * AiChatPanel — A resizable side panel that provides an AI-powered chat interface.
+ * Uses the AIShoppingAssistant package to handle conversations, product lookups,
+ * cart operations, and navigation actions via Gemini AI.
+ */
 export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPanelProps) {
+    // Chat state: message history and current input
     const [messages, setMessages] = useState<{ role: 'user' | 'ai', text: string }[]>([
         { role: 'ai', text: 'Hi! I can help you find products or check your order. Try saying "Show me headphones".' }
     ]);
     const [input, setInput] = useState('');
     const [isTyping, setIsTyping] = useState(false);
+
+    // AI assistant instance — initialized once on mount
     const [assistant, setAssistant] = useState<AIShoppingAssistant | null>(null);
+
+    // Panel resize state
     const [panelWidth, setPanelWidth] = useState(400);
     const [isResizing, setIsResizing] = useState(false);
 
@@ -27,12 +38,19 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const panelRef = useRef<HTMLDivElement>(null);
 
+    /**
+     * Initialize the AI Shopping Assistant on mount.
+     * Configures data providers (products, cart, deals) and registers
+     * actions the AI can trigger (navigate, add_to_cart, clear_cart, autofill_checkout).
+     */
     useEffect(() => {
         const initAssistant = async () => {
             const ai = new AIShoppingAssistant({
                 apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY || '',
+                model: process.env.NEXT_PUBLIC_GEMINI_MODEL,
                 autoDetectContext: true,
-                
+
+                // Data providers supply real-time context to the AI assistant
                 dataProviders: {
                     products: async () => {
                         const { products } = await import('@/lib/products');
@@ -44,38 +62,48 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
                         return deals;
                     }
                 },
-                
+
+                // Actions the AI can execute based on user intent
                 actions: {
+                    // Navigate to a page (e.g., checkout, product detail)
                     navigate: (path: any) => {
                         const url = typeof path === 'string' ? path : path?.url || path?.path || '/checkout';
                         router.push(url);
                     },
+                    // Add a product to cart by ID
                     add_to_cart: async (productId: string) => {
                         const { products } = await import('@/lib/products');
                         const product = products.find(p => String(p.id) === String(productId));
                         if (product) addToCart(product);
                     },
+                    // Clear all items from cart
                     clear_cart: () => {
                         clearCart();
                     },
+                    // Dispatch a custom event to autofill checkout form fields
                     autofill_checkout: (data: any) => {
                         const event = new CustomEvent('autofill-checkout', { detail: data });
                         window.dispatchEvent(event);
                     }
                 }
             });
-            
+
             await ai.initialize();
             setAssistant(ai);
         };
-        
+
         initAssistant();
     }, [router, addToCart, clearCart, cart]);
 
+    // Auto-scroll to the latest message when messages update
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
 
+    /**
+     * Handle panel resize via mouse drag on the left edge.
+     * Clamps width between 300px and 800px.
+     */
     useEffect(() => {
         if (!isResizing) return;
 
@@ -99,6 +127,11 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
         };
     }, [isResizing]);
 
+    /**
+     * Handle chat form submission.
+     * Sends the user message to the AI assistant, updates chat history,
+     * and displays the AI response. Keeps last 10 messages as context.
+     */
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!input.trim() || !assistant) return;
@@ -109,7 +142,9 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
         setIsTyping(true);
 
         try {
+            // Send last 10 messages as conversation context
             const history = messages.slice(-10);
+            // Update cart context before each message so AI has fresh data
             assistant.updateContext({ data: { cart } });
             const response = await assistant.chat(input, history);
             setMessages(prev => [...prev, { role: 'ai', text: response.message }]);
@@ -121,6 +156,7 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
         }
     };
 
+    // Don't render anything if the panel is closed
     if (!isOpen) return null;
 
     return (
@@ -140,6 +176,7 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
                 boxShadow: '-4px 0 12px rgba(0, 0, 0, 0.1)'
             }}
         >
+                {/* Resize handle — drag left edge to resize panel */}
                 <div
                     style={{
                         position: 'absolute',
@@ -154,6 +191,7 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
                     onMouseDown={() => setIsResizing(true)}
                 />
 
+                {/* Header with title and close button */}
                 <div style={{
                     padding: '1rem',
                     background: 'linear-gradient(135deg, var(--primary), var(--accent))',
@@ -171,6 +209,7 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
                     </button>
                 </div>
 
+                {/* Message list — scrollable area showing conversation history */}
                 <div style={{
                     flex: 1,
                     overflowY: 'auto',
@@ -187,6 +226,7 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
                             maxWidth: '85%',
                             flexDirection: msg.role === 'user' ? 'row-reverse' : 'row'
                         }}>
+                            {/* Avatar icon — user or bot */}
                             <div style={{
                                 width: '24px', height: '24px', borderRadius: '50%',
                                 background: msg.role === 'user' ? 'var(--primary)' : '#e5e7eb',
@@ -195,6 +235,7 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
                             }}>
                                 {msg.role === 'user' ? <User size={14} color="white" /> : <Bot size={14} color="#374151" />}
                             </div>
+                            {/* Message bubble with role-based styling */}
                             <div style={{
                                 background: msg.role === 'user' ? 'var(--primary)' : '#f3f4f6',
                                 color: msg.role === 'user' ? 'white' : '#1f2937',
@@ -211,14 +252,17 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
                             </div>
                         </div>
                     ))}
+                    {/* Typing indicator shown while AI is generating a response */}
                     {isTyping && (
                         <div style={{ alignSelf: 'flex-start', color: '#9ca3af', fontSize: '0.8rem', paddingLeft: '2.5rem' }}>
                             typing...
                         </div>
                     )}
+                    {/* Scroll anchor — auto-scrolls to here on new messages */}
                     <div ref={messagesEndRef} />
                 </div>
 
+                {/* Input form — text field and send button */}
                 <form onSubmit={handleSubmit} style={{
                     padding: '1rem',
                     borderTop: '1px solid var(--border)',

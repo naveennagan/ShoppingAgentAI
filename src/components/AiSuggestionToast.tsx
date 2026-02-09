@@ -27,7 +27,7 @@ export default function AiSuggestionToast({ message, onClose, onOpenChat }: AiSu
         <div
             style={{
                 position: 'fixed',
-                top: '4.5rem',
+                top: '80px',
                 left: '50%',
                 transform: 'translateX(-50%)',
                 maxWidth: '600px',

@@ -3,28 +3,31 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Product } from '@/lib/products';
 
-function generateSuggestion(product: Product, currentCart: CartItem[]): string | null {
-    // Laptop suggestions
-    if (product.category === 'Electronics' && product.name.includes('Laptop')) {
-        return "Great choice! Consider adding a Mechanical Gaming Keyboard ($129.99) and Precision Wireless Mouse ($79.99) to complete your setup.";
+async function generateAISuggestion(product: Product, currentCart: CartItem[]): Promise<void> {
+    try {
+        const cartInfo = currentCart.length > 0 
+            ? `Current cart: ${currentCart.map(i => i.product.name).join(', ')}. ` 
+            : '';
+        
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: `${cartInfo}User just added "${product.name}" (${product.category}, $${product.price}) to cart. Suggest 1-2 complementary products from our catalog in one short sentence (max 25 words).`,
+                history: []
+            })
+        });
+        
+        const data = await response.json();
+        console.log('AI Suggestion Response:', data);
+        if (data.message) {
+            window.dispatchEvent(new CustomEvent('ai-suggestion', { 
+                detail: { suggestion: data.message } 
+            }));
+        }
+    } catch (error) {
+        console.error('Failed to generate AI suggestion:', error);
     }
-    
-    // Phone suggestions
-    if (product.id === 'ph-1') {
-        return "Nice! Add the Ultra Smart Fitness Watch and get $50 off! Perfect combo for staying connected.";
-    }
-    
-    // Desk suggestions
-    if (product.id === 'fur-2') {
-        return "Perfect! Add the Ergonomic Mesh Chair and get 20% off as part of our Work From Home Bundle!";
-    }
-    
-    // Headphones suggestions
-    if (product.id === '1') {
-        return "Excellent choice! Enjoy 10% off as part of our Audiophile Starter deal.";
-    }
-    
-    return null;
 }
 
 export interface CartItem {
@@ -79,13 +82,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
                 );
             }
             
-            // Trigger AI suggestion
-            setTimeout(() => {
-                const suggestion = generateSuggestion(product, prev);
-                if (suggestion) {
-                    window.dispatchEvent(new CustomEvent('ai-suggestion', { detail: { suggestion } }));
-                }
-            }, 500);
+            // Trigger AI suggestion (disabled due to quota limits)
+            // setTimeout(() => {
+            //     generateAISuggestion(product, prev);
+            // }, 500);
             
             return [...prev, { product, quantity: 1 }];
         });
