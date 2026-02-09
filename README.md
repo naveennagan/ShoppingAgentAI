@@ -1,125 +1,198 @@
-# AI Shopping Assistant
+# Shopping Agent AI
 
-An AI-powered e-commerce app built with Next.js 16, React 19, and Google Gemini AI.
+A full-stack e-commerce application with AI-powered shopping assistant.
 
-## Tech Stack
+## Architecture
 
-- Next.js 16 (App Router)
-- React 19
-- Google Gemini AI
-- TypeScript
-- Zod (schema validation)
-- Lucide React (icons)
+### Frontend (Next.js)
+- **Location**: Root directory
+- **Port**: 3000
+- **Tech**: Next.js 16, React 19, TypeScript
 
-## Getting Started
+### Backend (Spring Boot)
+- **Location**: `shopping-agent-backend/`
+- **Port**: 8080
+- **Tech**: Spring Boot 3.2, Java 17, Gemini AI
+
+## Prerequisites
+
+- **Node.js** 18+ and npm
+- **Java** 17+
+- **Maven** 3.6+
+- **Gemini API Key** from [Google AI Studio](https://aistudio.google.com/app/apikey)
+
+## Setup Instructions
+
+### 1. Backend Setup
 
 ```bash
+cd shopping-agent-backend/src/main/resources
+cp application.properties.example application.properties
+# Edit application.properties and add your API key
+
+cd ../../..
+mvn clean install
+mvn spring-boot:run
+```
+
+Backend runs on http://localhost:8080
+
+**To stop:** Press `Ctrl+C` twice or use `kill -9 $(lsof -ti:8080)`
+
+### 2. Frontend Setup
+
+```bash
+# Install dependencies
 npm install
+
+# Create .env.local file
+cat > .env.local << EOF
+NEXT_PUBLIC_API_URL=http://localhost:8080
+EOF
+
+# Run development server
 npm run dev
 ```
 
-Create a `.env.local` file based on `.env.example`:
+Frontend runs on http://localhost:3000
 
-```
-GEMINI_API_KEY=your_api_key
-NEXT_PUBLIC_GEMINI_API_KEY=your_api_key
-NEXT_PUBLIC_GEMINI_MODEL=gemini-2.0-flash-lite
-GEMINI_MODEL=gemini-2.0-flash-lite
+**To stop:** Press `Ctrl+C`
+
+## API Endpoints
+
+### Backend (Spring Boot)
+- `GET /api/products` - Get all products
+- `GET /api/products/{id}` - Get product by ID
+- `POST /api/chat` - AI chat endpoint
+
+**Example:**
+```bash
+curl http://localhost:8080/api/products
+curl -X POST http://localhost:8080/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Show me phones","history":[]}'
 ```
 
-Get your Gemini API key from [https://ai.google.dev/](https://ai.google.dev/)
+## Features
+
+- 🛍️ Product browsing and search
+- 🤖 AI-powered shopping assistant (Gemini)
+- 🛒 Shopping cart management
+- 💳 Checkout with AI autofill
+- 📦 Order tracking
+- 🎨 Responsive UI design
+
+## Tech Stack
+
+**Frontend:**
+- Next.js 16 (App Router)
+- React 19
+- TypeScript
+- Lucide Icons
+- Context API for state
+
+**Backend:**
+- Spring Boot 3.2
+- Java 17
+- Google Gemini AI API
+- Maven
+- Lombok
+- Gson
 
 ## Project Structure
 
 ```
-src/
-├── app/                    # Next.js App Router pages
-│   ├── api/chat/           # AI chat API route
-│   ├── cart/               # Cart page
-│   ├── checkout/           # Checkout flow
-│   ├── products/           # Product listing & detail pages
-│   └── tracking/           # Order tracking
-├── components/             # React components
-│   ├── AiChatPanel.tsx     # AI chat panel
-│   ├── AiChatWidget.tsx    # Floating chat widget
-│   ├── AiSuggestionToast.tsx
-│   ├── Navbar.tsx
-│   ├── ProductCard.tsx
-│   └── Providers.tsx
-├── context/
-│   └── CartContext.tsx      # Cart state management
-└── lib/
-    ├── agent/intents.ts     # AI intent detection
-    ├── products.ts          # Product catalog & deals
-    └── prompts.ts           # AI system prompts
-
-packages/
-└── ai-shopping-assistant/   # Standalone AI assistant package
-    └── src/
-        ├── AIShoppingAssistant.ts  # Main assistant class
-        ├── ContextExtractor.ts     # DOM context extraction
-        ├── SchemaGenerator.ts      # Dynamic schema generation
-        ├── config.ts               # Model configuration
-        ├── prompts.ts              # Prompt templates
-        ├── types.ts                # TypeScript types
-        └── useAIAssistant.ts       # React hook
+ShoppingAgentAI/
+├── src/                          # Next.js frontend
+│   ├── app/                      # Pages and routes
+│   │   ├── api/chat/             # (Deprecated - now uses backend)
+│   │   ├── cart/                 # Cart page
+│   │   ├── checkout/             # Checkout page
+│   │   ├── products/             # Product pages
+│   │   └── tracking/             # Order tracking
+│   ├── components/               # React components
+│   │   ├── AiChatWidget.tsx      # Floating chat widget
+│   │   ├── Navbar.tsx            # Navigation bar
+│   │   ├── ProductCard.tsx       # Product display card
+│   │   └── Providers.tsx         # Context providers
+│   ├── context/
+│   │   └── CartContext.tsx       # Cart state management
+│   └── lib/
+│       ├── api-client.ts         # Backend API client
+│       ├── products.ts           # Product data (frontend)
+│       └── agent/intents.ts      # AI intent detection
+│
+├── shopping-agent-backend/       # Spring Boot backend
+│   ├── src/main/java/com/shoppingagent/
+│   │   ├── controller/
+│   │   │   ├── ChatController.java       # /api/chat endpoint
+│   │   │   └── ProductController.java    # /api/products endpoint
+│   │   ├── service/
+│   │   │   ├── GeminiService.java        # Gemini AI integration
+│   │   │   └── ProductService.java       # Product business logic
+│   │   ├── model/
+│   │   │   ├── Product.java              # Product entity
+│   │   │   ├── ChatRequest.java          # Chat request DTO
+│   │   │   └── ChatResponse.java         # Chat response DTO
+│   │   └── ShoppingAgentApplication.java # Main Spring Boot app
+│   ├── src/main/resources/
+│   │   ├── application.properties        # Config (gitignored)
+│   │   └── application.properties.example # Config template
+│   ├── pom.xml                           # Maven dependencies
+│   └── README.md                         # Backend docs
+│
+├── packages/
+│   └── ai-shopping-assistant/    # Standalone AI package
+│       └── src/
+│           ├── AIShoppingAssistant.ts
+│           ├── ContextExtractor.ts
+│           └── useAIAssistant.ts
+│
+├── .env.local                    # Frontend env (gitignored)
+├── .env.local.example            # Frontend env template
+├── package.json                  # Frontend dependencies
+└── README.md                     # This file
 ```
 
-## MCP (Model Context Protocol) Configuration
+## Development
 
-This project uses MCP servers to extend Kiro's capabilities. MCP lets the AI assistant connect to external tools and services through a standardized protocol.
+Run both servers simultaneously:
 
-### How It Works
-
-```
-You (in Kiro chat)
-  → Ask Kiro to do something (e.g., "check Slack for messages")
-    → Kiro calls the appropriate MCP tool
-      → MCP server (runs locally via uvx) receives the call
-        → Server makes API request to the external service
-          → Response flows back to Kiro
-```
-
-MCP servers run as local processes on your machine. No data goes through third-party servers.
-
-### Configured Servers
-
-Configuration lives in `.kiro/settings/mcp.json`:
-
-#### 1. AWS Documentation (`aws-docs`)
-- Searches and reads AWS documentation directly from Kiro
-- Useful for looking up service docs, API references, and best practices
-- Package: `awslabs.aws-documentation-mcp-server`
-
-#### 2. Slack (`slack`)
-- Read messages from Slack channels
-- Send messages and reply to threads
-- List channels and users
-- Package: `mcp-slack`
-- Requires: Slack Bot Token (`xoxb-...`)
-
-### Slack MCP Setup
-
-1. Create a Slack App at [https://api.slack.com/apps](https://api.slack.com/apps)
-2. Add Bot Token Scopes under "OAuth & Permissions":
-   - `channels:history` — read messages in public channels
-   - `channels:read` — list channels
-   - `chat:write` — send messages
-   - Add `groups:history` and `groups:read` only if you need private channels
-3. Install the app to your workspace
-4. Copy the Bot Token (`xoxb-...`) and add it to `.kiro/settings/mcp.json`
-5. Invite the bot to specific channels only (the bot can only see channels it's been invited to)
-
-### Corporate Proxy / SSL Notes
-
-If you're behind a corporate proxy, you may need:
-- `UV_NATIVE_TLS=true` — tells `uvx` to use system TLS instead of bundled certs
-- SSL monkey-patching for Python-based MCP servers (see the `slack` config in `mcp.json` for an example)
-
-### Prerequisites
-
-MCP servers run via `uvx`, which requires the `uv` Python package manager:
-
+**Terminal 1 (Backend):**
 ```bash
-brew install uv
+cd shopping-agent-backend
+mvn spring-boot:run
 ```
+
+**Terminal 2 (Frontend):**
+```bash
+npm run dev
+```
+
+Open http://localhost:3000 in your browser.
+
+## Troubleshooting
+
+**Port already in use:**
+```bash
+# Kill process on port 8080
+kill -9 $(lsof -ti:8080)
+
+# Kill process on port 3000
+kill -9 $(lsof -ti:3000)
+```
+
+**Maven plugin error:**
+Ensure `pom.xml` has Spring Boot plugin version specified.
+
+**Network/Proxy issues:**
+If behind corporate proxy, the backend handles SSL bypass for Gemini API calls.
+
+**API Key leaked:**
+1. Get new key from [Google AI Studio](https://aistudio.google.com/app/apikey)
+2. Never commit `application.properties` or `.env.local`
+3. Use environment variables: `export GEMINI_API_KEY=your_key`
+
+## License
+
+MIT
