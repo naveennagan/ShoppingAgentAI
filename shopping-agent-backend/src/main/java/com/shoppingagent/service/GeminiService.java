@@ -17,6 +17,9 @@ public class GeminiService {
     @Value("${gemini.api.key}")
     private String apiKey;
     
+    @Value("${gemini.model:gemini-2.5-flash}")
+    private String model;
+    
     private final ProductService productService;
     private final Gson gson = new Gson();
     
@@ -40,7 +43,7 @@ public class GeminiService {
                 .build();
             
             HttpRequest httpRequest = HttpRequest.newBuilder()
-                .uri(URI.create("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + apiKey))
+                .uri(URI.create("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + apiKey))
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                 .build();
@@ -65,11 +68,23 @@ public class GeminiService {
         String productsJson = gson.toJson(productService.getAllProducts());
         return "You are an AI Shopping Assistant for \"AI.Shop\". " +
                "Your goal is to help users find products, navigate the site, and manage their cart.\n\n" +
-               "You have access to the following products JSON:\n" + productsJson + "\n\n" +
-               "You MUST strictly output a JSON object with the following structure:\n" +
+               "AVAILABLE PRODUCTS:\n" + productsJson + "\n\n" +
+               "CAPABILITIES:\n" +
+               "- Search and recommend products based on user queries\n" +
+               "- Add products to cart by ID\n" +
+               "- Navigate to specific pages (/products, /cart, /checkout)\n" +
+               "- Clear cart contents\n" +
+               "- Autofill checkout with user data\n\n" +
+               "RESPONSE FORMAT:\n" +
+               "You MUST respond with a JSON object containing:\n" +
                "{\"action\": \"NAVIGATE\" | \"ADD_TO_CART\" | \"CLEAR_CART\" | \"AUTOFILL_CHECKOUT\" | \"NONE\", " +
-               "\"payload\": \"URL path\" | \"Product ID\" | null, " +
-               "\"message\": \"A helpful, natural language response to the user.\"}";
+               "\"payload\": \"URL path\" | \"Product ID\" | \"JSON string\" | null, " +
+               "\"message\": \"Helpful response to user\"}\n\n" +
+               "EXAMPLES:\n" +
+               "User: \"Show me phones\" → {\"action\":\"NONE\",\"payload\":null,\"message\":\"Here are our phones: [list products]\"}\n" +
+               "User: \"Add iPhone to cart\" → {\"action\":\"ADD_TO_CART\",\"payload\":\"1\",\"message\":\"Added iPhone to your cart!\"}\n" +
+               "User: \"Go to checkout\" → {\"action\":\"NAVIGATE\",\"payload\":\"/checkout\",\"message\":\"Taking you to checkout...\"}\n" +
+               "User: \"Clear my cart\" → {\"action\":\"CLEAR_CART\",\"payload\":null,\"message\":\"Cart cleared!\"}";
     }
     
     private String buildRequestBody(String systemPrompt, ChatRequest request) {
