@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "aws-docs": {
+      "command": "uvx",
+      "args": ["awslabs.aws-documentation-mcp-server@latest"],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "ERROR",
+        "UV_NATIVE_TLS": "true"
+      },
+      "disabled": false,
+      "autoApprove": []
+    },
+    "slack": {
+      "command": "uvx",
+      "args": ["--with", "mcp-slack", "python", "-c", "import ssl; ssl._create_default_https_context = ssl._create_unverified_context; from mcp_slack import main; main()"],
+      "env": {
+        "SLACK_BOT_TOKEN": "xoxb-your-token-here",
+        "UV_NATIVE_TLS": "true"
+      },
+      "disabled": false,
+      "autoApprove": []
+    }
+  }
+}

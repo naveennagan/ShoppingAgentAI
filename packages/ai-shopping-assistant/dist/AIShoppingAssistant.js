@@ -4,7 +4,6 @@ exports.AIShoppingAssistant = void 0;
 const generative_ai_1 = require("@google/generative-ai");
 const zod_1 = require("zod");
 const ContextExtractor_1 = require("./ContextExtractor");
-const SchemaGenerator_1 = require("./SchemaGenerator");
 const config_1 = require("./config");
 const prompts_1 = require("./prompts");
 const ResponseSchema = zod_1.z.object({
@@ -43,20 +42,19 @@ class AIShoppingAssistant {
                 }
             }
         }
-        // Generate dynamic schema using AI
-        if (Object.keys(this.context.data).length > 0) {
-            try {
-                const analysis = await SchemaGenerator_1.SchemaGenerator.analyzeWithAI(this.context.data, this.config.apiKey, this.config.model);
-                this.dynamicSchema = analysis.schema;
-                if (!this.context.capabilities) {
-                    this.context.capabilities = analysis.capabilities;
-                }
-            }
-            catch (error) {
-                console.warn('Failed to generate dynamic schema:', error);
-                this.dynamicSchema = SchemaGenerator_1.SchemaGenerator.createDynamicPrompt(this.context.data);
-            }
-        }
+        // Generate dynamic schema using AI (disabled to save quota)
+        // if (Object.keys(this.context.data).length > 0) {
+        //   try {
+        //     const analysis = await SchemaGenerator.analyzeWithAI(this.context.data, this.config.apiKey, this.config.model);
+        //     this.dynamicSchema = analysis.schema;
+        //     if (!this.context.capabilities) {
+        //       this.context.capabilities = analysis.capabilities;
+        //     }
+        //   } catch (error) {
+        //     console.warn('Failed to generate dynamic schema:', error);
+        //     this.dynamicSchema = SchemaGenerator.createDynamicPrompt(this.context.data);
+        //   }
+        // }
     }
     async chat(message, history = []) {
         // Regenerate system prompt with current context data
