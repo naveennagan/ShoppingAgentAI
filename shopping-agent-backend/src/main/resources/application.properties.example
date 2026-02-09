@@ -1,0 +1,9 @@
+server.port=8080
+spring.application.name=shopping-agent-backend
+
+# Gemini API Configuration
+gemini.api.key=${GEMINI_API_KEY}
+gemini.model=gemini-2.5-flash
+
+# CORS
+spring.web.cors.allowed-origins=http://localhost:3000
