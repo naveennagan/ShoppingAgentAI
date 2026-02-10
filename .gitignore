@@ -43,6 +43,3 @@ next-env.d.ts
 
 # Spring Boot - Ignore local config with secrets
 shopping-agent-backend/src/main/resources/application.properties
-
-# Unused packages folder
-packages/
