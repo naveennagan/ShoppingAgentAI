@@ -1,0 +1,33 @@
+{
+  "name": "@ai-shop/assistant",
+  "version": "1.0.0",
+  "description": "Universal AI Assistant SDK for any website - e-commerce, content, forms, navigation",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "keywords": [
+    "ai",
+    "assistant",
+    "chatbot",
+    "automation",
+    "ecommerce",
+    "universal"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "cheerio": "^1.2.0",
+    "zod": "^3.25.76"
+  },
+  "peerDependencies": {
+    "@google/generative-ai": "^0.24.0",
+    "react": ">=18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  }
+}
