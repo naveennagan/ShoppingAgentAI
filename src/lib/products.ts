@@ -467,8 +467,8 @@ export const deals = [
     {
         id: 'deal-3',
         title: 'Mobile Power User',
-        description: 'Purchase Flagship Phone X1 and get the Smart Watch for $50 off.',
+        description: 'Purchase Flagship Phone X1 and get the Smart Watch for £50 off.',
         triggerProducts: ['ph-1', '2'],
-        discount: '$50 off'
+        discount: '£50 off'
     }
 ];

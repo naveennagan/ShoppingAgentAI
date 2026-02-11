@@ -4,7 +4,6 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCart } from '@/context/CartContext';
 import { X, Send, Sparkles, User, Bot } from 'lucide-react';
-import { AIShoppingAssistant } from '../../packages/ai-shopping-assistant/src';
 
 /** Props for the AI Chat Panel component */
 interface AiChatPanelProps {
@@ -26,74 +25,14 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
     const [input, setInput] = useState('');
     const [isTyping, setIsTyping] = useState(false);
 
-    // AI assistant instance — initialized once on mount
-    const [assistant, setAssistant] = useState<AIShoppingAssistant | null>(null);
-
     // Panel resize state
     const [panelWidth, setPanelWidth] = useState(400);
     const [isResizing, setIsResizing] = useState(false);
 
     const router = useRouter();
-    const { addToCart, clearCart, items: cart } = useCart();
+    const { addToCart, clearCart, updateQuantity, removeFromCart, items: cart } = useCart();
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const panelRef = useRef<HTMLDivElement>(null);
-
-    /**
-     * Initialize the AI Shopping Assistant on mount.
-     * Configures data providers (products, cart, deals) and registers
-     * actions the AI can trigger (navigate, add_to_cart, clear_cart, autofill_checkout).
-     */
-    useEffect(() => {
-        const initAssistant = async () => {
-            const ai = new AIShoppingAssistant({
-                apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY || '',
-                model: process.env.NEXT_PUBLIC_GEMINI_MODEL,
-                autoDetectContext: true,
-
-                // Data providers supply real-time context to the AI assistant
-                dataProviders: {
-                    products: async () => {
-                        const { products } = await import('@/lib/products');
-                        return products;
-                    },
-                    cart: async () => cart,
-                    deals: async () => {
-                        const { deals } = await import('@/lib/products');
-                        return deals;
-                    }
-                },
-
-                // Actions the AI can execute based on user intent
-                actions: {
-                    // Navigate to a page (e.g., checkout, product detail)
-                    navigate: (path: any) => {
-                        const url = typeof path === 'string' ? path : path?.url || path?.path || '/checkout';
-                        router.push(url);
-                    },
-                    // Add a product to cart by ID
-                    add_to_cart: async (productId: string) => {
-                        const { products } = await import('@/lib/products');
-                        const product = products.find(p => String(p.id) === String(productId));
-                        if (product) addToCart(product);
-                    },
-                    // Clear all items from cart
-                    clear_cart: () => {
-                        clearCart();
-                    },
-                    // Dispatch a custom event to autofill checkout form fields
-                    autofill_checkout: (data: any) => {
-                        const event = new CustomEvent('autofill-checkout', { detail: data });
-                        window.dispatchEvent(event);
-                    }
-                }
-            });
-
-            await ai.initialize();
-            setAssistant(ai);
-        };
-
-        initAssistant();
-    }, [router, addToCart, clearCart, cart]);
 
     // Auto-scroll to the latest message when messages update
     useEffect(() => {
@@ -134,7 +73,7 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
      */
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!input.trim() || !assistant) return;
+        if (!input.trim()) return;
 
         const userMessage = { role: 'user' as const, text: input };
         setMessages(prev => [...prev, userMessage]);
@@ -142,12 +81,39 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
         setIsTyping(true);
 
         try {
-            // Send last 10 messages as conversation context
-            const history = messages.slice(-10);
-            // Update cart context before each message so AI has fresh data
-            assistant.updateContext({ data: { cart } });
-            const response = await assistant.chat(input, history);
-            setMessages(prev => [...prev, { role: 'ai', text: response.message }]);
+            const history = messages.slice(-10).map(m => ({
+                role: m.role === 'user' ? 'user' : 'model',
+                parts: [{ text: m.text }]
+            }));
+
+            const response = await fetch('/api/ai-chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: input, cart, history })
+            });
+
+            const data = await response.json();
+            
+            // Execute action if needed
+            if (data.action === 'navigate') {
+                router.push(data.payload);
+            } else if (data.action === 'add_to_cart') {
+                const { products } = await import('@/lib/products');
+                const product = products.find(p => String(p.id) === String(data.payload));
+                if (product) addToCart(product);
+            } else if (data.action === 'clear_cart') {
+                clearCart();
+            } else if (data.action === 'update_quantity') {
+                updateQuantity(data.payload.productId, data.payload.quantity);
+            } else if (data.action === 'remove_from_cart') {
+                removeFromCart(data.payload);
+            } else if (data.action === 'autofill_checkout') {
+                const event = new CustomEvent('autofill-checkout', { detail: data.payload || {} });
+                window.dispatchEvent(event);
+                setTimeout(() => router.push('/checkout'), 100);
+            }
+
+            setMessages(prev => [...prev, { role: 'ai', text: data.message }]);
         } catch (error) {
             console.error('Chat error:', error);
             setMessages(prev => [...prev, { role: 'ai', text: "Sorry, I encountered an issue. Please try again." }]);

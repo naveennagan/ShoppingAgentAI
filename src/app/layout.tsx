@@ -8,6 +8,7 @@ import AiChatPanel from "@/components/AiChatPanel";
 import AiSuggestionToast from "@/components/AiSuggestionToast";
 import Providers from "@/components/Providers";
 import "./globals.css";
+import "@/styles/main.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

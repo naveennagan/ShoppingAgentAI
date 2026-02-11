@@ -20,7 +20,7 @@ async function generateAISuggestion(product: Product, currentCart: CartItem[]): 
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                message: `${cartInfo}User just added "${product.name}" (${product.category}, $${product.price}) to cart. Suggest 1-2 complementary products from our catalog in one short sentence (max 25 words).`,
+                message: `${cartInfo}User just added "${product.name}" (${product.category}, ${product.price}) to cart. Suggest 1-2 complementary products from our catalog in one short sentence (max 25 words).`,
                 history: []
             })
         });
@@ -65,8 +65,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
                 const backendCart = await apiClient.getCart(SESSION_ID);
                 const products = await apiClient.getProducts();
                 
-                const cartItems: CartItem[] = backendCart.items.map(item => {
-                    const product = products.find(p => p.id === item.productId);
+                const cartItems: CartItem[] = backendCart.items.map((item: any) => {
+                    const product = products.find((p: Product) => p.id === item.productId);
                     return product ? { product, quantity: item.quantity } : null;
                 }).filter(Boolean) as CartItem[];
                 
@@ -83,9 +83,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
         try {
             await apiClient.addToCart(SESSION_ID, product.id, 1);
             setItems(prev => {
-                const existing = prev.find(item => item.product.id === product.id);
+                const existing = prev.find((item: CartItem) => item.product.id === product.id);
                 if (existing) {
-                    return prev.map(item =>
+                    return prev.map((item: CartItem) =>
                         item.product.id === product.id
                             ? { ...item, quantity: item.quantity + 1 }
                             : item
@@ -101,7 +101,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     const removeFromCart = async (productId: string) => {
         try {
             await apiClient.removeFromCart(SESSION_ID, productId);
-            setItems(prev => prev.filter(item => item.product.id !== productId));
+            setItems(prev => prev.filter((item: CartItem) => item.product.id !== productId));
         } catch (error) {
             console.error('Failed to remove from cart:', error);
         }
@@ -122,8 +122,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
             return;
         }
         try {
-            await apiClient.addToCart(SESSION_ID, productId, quantity - (items.find(i => i.product.id === productId)?.quantity || 0));
-            setItems(prev => prev.map(item =>
+            await apiClient.addToCart(SESSION_ID, productId, quantity - (items.find((i: CartItem) => i.product.id === productId)?.quantity || 0));
+            setItems(prev => prev.map((item: CartItem) =>
                 item.product.id === productId ? { ...item, quantity } : item
             ));
         } catch (error) {
@@ -131,8 +131,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
         }
     };
 
-    const total = items.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
-    const count = items.reduce((sum, item) => sum + item.quantity, 0);
+    const total = items.reduce((sum: number, item: CartItem) => sum + (item.product.price * item.quantity), 0);
+    const count = items.reduce((sum: number, item: CartItem) => sum + item.quantity, 0);
 
     return (
         <CartContext.Provider value={{ items, addToCart, removeFromCart, updateQuantity, clearCart, total, count }}>
