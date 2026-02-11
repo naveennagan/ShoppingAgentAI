@@ -25,7 +25,6 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
     const [input, setInput] = useState('');
     const [isTyping, setIsTyping] = useState(false);
 
-    // Panel resize state
     const [panelWidth, setPanelWidth] = useState(400);
     const [isResizing, setIsResizing] = useState(false);
 
@@ -82,19 +81,19 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
 
         try {
             const history = messages.slice(-10).map(m => ({
-                role: m.role === 'user' ? 'user' : 'model',
-                parts: [{ text: m.text }]
+                role: m.role === 'user' ? 'user' : 'ai',
+                text: m.text
             }));
 
-            const response = await fetch('/api/ai-chat', {
+            const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: input, cart, history })
+                body: JSON.stringify({ message: input, history })
             });
 
             const data = await response.json();
             
-            // Execute action if needed
+            // Execute action
             if (data.action === 'navigate') {
                 router.push(data.payload);
             } else if (data.action === 'add_to_cart') {
@@ -116,7 +115,7 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
             setMessages(prev => [...prev, { role: 'ai', text: data.message }]);
         } catch (error) {
             console.error('Chat error:', error);
-            setMessages(prev => [...prev, { role: 'ai', text: "Sorry, I encountered an issue. Please try again." }]);
+            setMessages(prev => [...prev, { role: 'ai', text: "Sorry, I encountered an issue." }]);
         } finally {
             setIsTyping(false);
         }
