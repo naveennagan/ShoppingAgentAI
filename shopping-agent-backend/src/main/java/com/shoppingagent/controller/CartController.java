@@ -60,4 +60,12 @@ public class CartController {
         Cart cart = cartService.updateQuantity(sessionId, productId, quantity);
         return cart;
     }
+    
+    @PostMapping("/{sessionId}/add-batch")
+    public Cart addBatchToCart(@PathVariable String sessionId, @RequestBody java.util.List<String> productIds) {
+        logger.info("POST /api/cart/{}/add-batch - Adding {} products", sessionId, productIds.size());
+        Cart cart = cartService.addBatchToCart(sessionId, productIds);
+        logger.info("Cart now has {} items", cart.getItems().size());
+        return cart;
+    }
 }

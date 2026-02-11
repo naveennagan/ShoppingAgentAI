@@ -24,10 +24,12 @@ export async function POST(req: Request) {
             history: [
                 { role: 'user', parts: [{ text: SYSTEM_PROMPT }] },
                 { role: 'model', parts: [{ text: '{"action": "none", "payload": null, "message": "Ready"}' }] },
-                ...history.map((msg: any) => ({
-                    role: msg.role === 'user' ? 'user' : 'model',
-                    parts: [{ text: msg.text }]
-                }))
+                ...history
+                    .filter((msg: any) => msg.text && msg.text.trim())
+                    .map((msg: any) => ({
+                        role: msg.role === 'ai' || msg.role === 'model' ? 'model' : 'user',
+                        parts: [{ text: msg.text }]
+                    }))
             ]
         });
 
@@ -51,9 +53,10 @@ export async function POST(req: Request) {
         return NextResponse.json(jsonResponse);
 
     } catch (error: any) {
+        console.error('Chat API error:', error);
         if (error.message?.includes('429') || error.message?.includes('quota')) {
             return NextResponse.json({ action: 'none', message: 'Rate limit exceeded. Please wait.' }, { status: 200 });
         }
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        return NextResponse.json({ action: 'none', message: 'Sorry, I encountered an issue.' }, { status: 200 });
     }
 }

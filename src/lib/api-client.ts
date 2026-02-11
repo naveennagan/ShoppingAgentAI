@@ -38,6 +38,16 @@ export const apiClient = {
     return res.json();
   },
 
+  async addBatchToCart(sessionId: string, productIds: string[]) {
+    const res = await fetch(`${API_URL}/api/cart/${sessionId}/add-batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(productIds)
+    });
+    if (!res.ok) throw new Error('Failed to add batch to cart');
+    return res.json();
+  },
+
   async removeFromCart(sessionId: string, productId: string) {
     const res = await fetch(`${API_URL}/api/cart/${sessionId}/remove/${productId}`, {
       method: 'DELETE'

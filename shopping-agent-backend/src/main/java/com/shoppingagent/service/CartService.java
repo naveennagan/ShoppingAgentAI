@@ -52,4 +52,20 @@ public class CartService {
         carts.put(sessionId, cart);
         return cart;
     }
+    
+    public Cart addBatchToCart(String sessionId, List<String> productIds) {
+        Cart cart = getCart(sessionId);
+        for (String productId : productIds) {
+            Optional<Cart.CartItem> existing = cart.getItems().stream()
+                .filter(item -> item.getProductId().equals(productId))
+                .findFirst();
+            if (existing.isPresent()) {
+                existing.get().setQuantity(existing.get().getQuantity() + 1);
+            } else {
+                cart.getItems().add(new Cart.CartItem(productId, 1));
+            }
+        }
+        carts.put(sessionId, cart);
+        return cart;
+    }
 }

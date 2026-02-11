@@ -98,8 +98,12 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
                 router.push(data.payload);
             } else if (data.action === 'add_to_cart') {
                 const { products } = await import('@/lib/products');
-                const product = products.find(p => String(p.id) === String(data.payload));
-                if (product) addToCart(product);
+                // Handle multiple products if payload is an array
+                const productIds = Array.isArray(data.payload) ? data.payload : [data.payload];
+                for (const productId of productIds) {
+                    const product = products.find(p => String(p.id) === String(productId));
+                    if (product) addToCart(product);
+                }
             } else if (data.action === 'clear_cart') {
                 clearCart();
             } else if (data.action === 'update_quantity') {

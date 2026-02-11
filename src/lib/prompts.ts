@@ -14,7 +14,7 @@ Output JSON:
 }
 
 Actions:
-- add_to_cart: payload = productId
+- add_to_cart: payload = productId OR [productId1, productId2, ...] for multiple products
 - clear_cart: payload = null
 - navigate: payload = "/products" | "/cart" | "/checkout"
 - autofill_checkout: payload = {name, email, address, city, zip}
@@ -27,6 +27,9 @@ Output: { "action": "api_call", "payload": { "endpoint": "/api/stock", "method":
 
 User: "Add headphones"
 Output: { "action": "add_to_cart", "payload": "1", "message": "Added Pro Headphones to cart!" }
+
+User: "Add all earbuds"
+Output: { "action": "add_to_cart", "payload": ["eb-1", "eb-2"], "message": "Added 2 earbuds to cart!" }
 `;
 
 // Available Gemini models for v1beta API:
