@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useCart } from '@/context/CartContext';
 import { MessageCircle, X, Send, Sparkles, User, Bot } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
+import { Product } from '@/lib/products';
 
 
 export default function AiChatWidget() {
@@ -29,7 +30,7 @@ export default function AiChatWidget() {
             try {
                 const history = await apiClient.getChatHistory(sessionId);
                 if (history.messages && history.messages.length > 0) {
-                    setMessages(history.messages.map(m => ({
+                    setMessages(history.messages.map((m: any) => ({
                         role: m.role as 'user' | 'ai',
                         text: m.text
                     })));
@@ -81,7 +82,7 @@ export default function AiChatWidget() {
                 router.push(data.payload);
             } else if (data.action === 'ADD_TO_CART' && data.payload) {
                 const products = await apiClient.getProducts();
-                const product = products.find(p => String(p.id) === String(data.payload));
+                const product = products.find((p: Product) => String(p.id) === String(data.payload));
                 if (product) addToCart(product);
             } else if (data.action === 'CLEAR_CART') {
                 clearCart();

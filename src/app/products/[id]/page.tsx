@@ -16,64 +16,43 @@ export default async function ProductPage({ params }: PageProps) {
     }
 
     return (
-        <main className="container" style={{ paddingBottom: '4rem', marginTop: '2rem' }}>
-            <Link href="/products" style={{ display: 'inline-flex', alignItems: 'center', marginBottom: '2rem', color: '#6b7280', fontWeight: 500 }}>
+        <main className="container product-detail">
+            <Link href="/products" className="product-detail__back">
                 ← Back to Products
             </Link>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4rem', alignItems: 'start' }}>
-                {/* Image Section */}
-                <div style={{ background: '#f3f4f6', borderRadius: '1rem', overflow: 'hidden', paddingBottom: '100%', position: 'relative' }}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
+            <div className="product-detail__grid">
+                <div className="product-detail__image">
                     <img
                         src={product.image.replace('400x400', '800x800')}
                         alt={product.name}
-                        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
                     />
                 </div>
 
-                {/* Details Section */}
                 <div>
-                    <span style={{ color: 'var(--primary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                        {product.category}
-                    </span>
-                    <h1 style={{ fontSize: '3rem', fontWeight: 800, margin: '0.5rem 0 1rem', lineHeight: 1.1 }}>
-                        {product.name}
-                    </h1>
-                    <p style={{ fontSize: '1.5rem', fontWeight: 600, color: '#111827', marginBottom: '2rem' }}>
-                        ${product.price.toFixed(2)}
-                    </p>
+                    <span className="product-detail__category">{product.category}</span>
+                    <h1 className="product-detail__title">{product.name}</h1>
+                    <p className="product-detail__price">${product.price.toFixed(2)}</p>
 
-                    <div style={{ marginBottom: '2rem', lineHeight: 1.6, color: '#4b5563' }}>
-                        {product.description}
-                    </div>
+                    <div className="product-detail__description">{product.description}</div>
 
                     <AddToCartButton product={product} />
 
-                    {/* Specs Section */}
                     {product.specs && (
-                        <div style={{ marginTop: '3rem', borderTop: '1px solid var(--border)', paddingTop: '2rem' }}>
-                            <h3 style={{ fontSize: '1.25rem', marginBottom: '1.5rem', fontWeight: 700 }}>Technical Specifications</h3>
-                            <div style={{
-                                display: 'grid',
-                                gridTemplateColumns: 'auto 1fr',
-                                gap: '1rem',
-                                border: '1px solid var(--border)',
-                                borderRadius: '0.5rem',
-                                padding: '1.5rem',
-                                background: 'white'
-                            }}>
-                                {Object.entries(product.specs).map(([key, value]) => (
+                        <div className="product-detail__specs">
+                            <h3>Technical Specifications</h3>
+                            <div className="product-detail__specs-grid">
+                                {Object.entries(product.specs).map(([key, value]: [string, unknown]) => (
                                     <div key={key} style={{ display: 'contents' }}>
-                                        <div style={{ color: '#6b7280', fontWeight: 500, paddingBottom: '0.5rem', borderBottom: '1px solid #f3f4f6' }}>{key}</div>
-                                        <div style={{ fontWeight: 600, color: '#111827', paddingBottom: '0.5rem', borderBottom: '1px solid #f3f4f6' }}>{value}</div>
+                                        <div className="product-detail__specs-key">{key}</div>
+                                        <div className="product-detail__specs-value">{String(value)}</div>
                                     </div>
                                 ))}
                             </div>
                         </div>
                     )}
 
-                    <div style={{ marginTop: '2rem', paddingTop: '1rem', color: '#6b7280', fontSize: '0.9rem' }}>
+                    <div className="product-detail__features">
                         <ul>
                             <li>Premium materials & build quality</li>
                             <li>2-year warranty included</li>
