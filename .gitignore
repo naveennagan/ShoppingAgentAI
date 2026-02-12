@@ -41,5 +41,8 @@ yarn-error.log*
 next-env.d.ts
 .kiro/settings/mcp.json
 
+# IDE
+.idea/
+
 # Spring Boot - Ignore local config with secrets
 shopping-agent-backend/src/main/resources/application.properties
