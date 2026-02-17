@@ -1,14 +1,27 @@
 'use client';
 
 import Link from 'next/link';
-import { Product } from '@/lib/products';
+import { Product, Promotion } from '@/lib/products';
+import { calculateDiscountedPrice } from '@/lib/discountCalculator';
 import AddToCartButton from './AddToCartButton';
+import { useEffect, useState } from 'react';
+import { apiClient } from '@/lib/api-client';
 
 interface ProductCardProps {
     product: Product;
 }
 
 export default function ProductCard({ product }: ProductCardProps) {
+    const [promotions, setPromotions] = useState<Promotion[]>([]);
+
+    useEffect(() => {
+        apiClient.getPromotionsForProduct(product.id).then(setPromotions).catch(() => {});
+    }, [product.id]);
+
+    const activePromo = promotions.find(p => p.active);
+    const discountedPrice = activePromo
+        ? calculateDiscountedPrice(product.price, activePromo.discountType, activePromo.discountValue)
+        : null;
 
     return (
         <div className="card" style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '1rem' }}>
@@ -36,6 +49,21 @@ export default function ProductCard({ product }: ProductCardProps) {
                     }}
                     className="product-image"
                 />
+                {activePromo?.promotionalLabel && (
+                    <span style={{
+                        position: 'absolute',
+                        top: '0.5rem',
+                        left: '0.5rem',
+                        background: '#ef4444',
+                        color: '#fff',
+                        padding: '0.25rem 0.5rem',
+                        borderRadius: '4px',
+                        fontSize: '0.75rem',
+                        fontWeight: 600
+                    }}>
+                        {activePromo.promotionalLabel}
+                    </span>
+                )}
             </div>
 
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
@@ -54,7 +82,7 @@ export default function ProductCard({ product }: ProductCardProps) {
                     fontSize: '0.9rem',
                     color: '#4b5563',
                     marginBottom: '1rem',
-                    flex: 1, /* Pushes price to bottom */
+                    flex: 1,
                     display: '-webkit-box',
                     WebkitLineClamp: 2,
                     WebkitBoxOrient: 'vertical',
@@ -65,9 +93,20 @@ export default function ProductCard({ product }: ProductCardProps) {
 
                 <div style={{ marginTop: 'auto' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                        <span style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'var(--primary)' }}>
-                            ${product.price.toFixed(2)}
-                        </span>
+                        {discountedPrice !== null ? (
+                            <div>
+                                <span style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#ef4444' }}>
+                                    £{discountedPrice.toFixed(2)}
+                                </span>
+                                <span style={{ fontSize: '0.9rem', color: '#9ca3af', textDecoration: 'line-through', marginLeft: '0.5rem' }}>
+                                    £{product.price.toFixed(2)}
+                                </span>
+                            </div>
+                        ) : (
+                            <span style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'var(--primary)' }}>
+                                £{product.price.toFixed(2)}
+                            </span>
+                        )}
                     </div>
                     <AddToCartButton product={product} />
                 </div>

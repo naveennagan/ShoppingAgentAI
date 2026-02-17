@@ -97,17 +97,19 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
             if (data.action === 'navigate') {
                 router.push(data.payload);
             } else if (data.action === 'add_to_cart') {
-                const { products } = await import('@/lib/products');
-                // Handle multiple products if payload is an array
+                const { apiClient } = await import('@/lib/api-client');
+                const products = await apiClient.getProducts();
                 const productIds = Array.isArray(data.payload) ? data.payload : [data.payload];
                 for (const productId of productIds) {
-                    const product = products.find(p => String(p.id) === String(productId));
+                    const product = products.find((p: any) => String(p.id) === String(productId));
                     if (product) addToCart(product);
                 }
             } else if (data.action === 'clear_cart') {
                 clearCart();
             } else if (data.action === 'update_quantity') {
                 updateQuantity(data.payload.productId, data.payload.quantity);
+            } else if (data.action === 'set_all_quantities') {
+                cart.forEach(item => updateQuantity(item.product.id, data.payload.quantity));
             } else if (data.action === 'remove_from_cart') {
                 removeFromCart(data.payload);
             } else if (data.action === 'autofill_checkout') {

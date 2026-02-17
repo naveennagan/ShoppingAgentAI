@@ -85,5 +85,19 @@ export const apiClient = {
     });
     if (!res.ok) throw new Error('Failed to clear chat history');
     return res.json();
+  },
+
+  // Promotion APIs
+  async getPromotionsForProduct(productId: string) {
+    const res = await fetch(`${API_URL}/api/promotions/product/${productId}`);
+    if (!res.ok) return [];
+    return res.json();
+  },
+
+  // Bundle APIs
+  async getActiveBundles() {
+    const res = await fetch(`${API_URL}/api/bundles/active`);
+    if (!res.ok) return [];
+    return res.json();
   }
 };

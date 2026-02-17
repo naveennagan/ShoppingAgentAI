@@ -1,9 +1,17 @@
 import { apiClient } from '@/lib/api-client';
-import ProductCard from '@/components/ProductCard';
 import { Product } from '@/lib/products';
+import ProductGrid from '@/components/ProductGrid';
 
 export default async function ProductsPage() {
-    const products = await apiClient.getProducts();
+    let products: Product[] = [];
+    let error = '';
+
+    try {
+        products = await apiClient.getProducts();
+    } catch (e) {
+        error = 'Unable to load products. Please try again later.';
+    }
+
     return (
         <main className="container products-page">
             <header className="products-page__header">
@@ -11,11 +19,11 @@ export default async function ProductsPage() {
                 <p>Explore our curated selection of premium goods, hand-picked for quality and style.</p>
             </header>
 
-            <div className="products-page__grid">
-                {products.map((product: Product) => (
-                    <ProductCard key={product.id} product={product} />
-                ))}
-            </div>
+            {error ? (
+                <p style={{ textAlign: 'center', color: '#ef4444', padding: '2rem' }}>{error}</p>
+            ) : (
+                <ProductGrid products={products} />
+            )}
         </main>
     );
 }

@@ -50,12 +50,32 @@ export default function CheckoutPage() {
                 zip: '94043'
             };
 
+            const paymentDefaults = {
+                cardNumber: '4242424242424242',
+                cardName: 'Test User',
+                expiry: '12/25',
+                cvv: '123'
+            };
+
             const updates = Object.keys(detail).length > 0 ? detail : defaults;
 
             setFormData(prev => ({
                 ...prev,
-                ...updates
+                name: updates.name || defaults.name,
+                email: updates.email || defaults.email,
+                address: updates.address || defaults.address,
+                city: updates.city || defaults.city,
+                zip: updates.zip || defaults.zip,
             }));
+
+            // Autofill payment if payment fields are provided or generic request
+            const paymentUpdates = {
+                cardNumber: updates.cardNumber || paymentDefaults.cardNumber,
+                cardName: updates.cardName || paymentDefaults.cardName,
+                expiry: updates.expiry || paymentDefaults.expiry,
+                cvv: updates.cvv || paymentDefaults.cvv,
+            };
+            setPaymentData(paymentUpdates);
             
             // Auto-advance to payment step after autofill
             setTimeout(() => setStep(2), 500);
