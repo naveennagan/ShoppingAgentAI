@@ -11,13 +11,13 @@ import java.util.List;
 public class ChatHistory {
     private String sessionId;
     private List<ChatMessage> messages;
-    
+
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
     public static class ChatMessage {
         private String role;
         private String text;
-        private long timestamp;
+        private String timestamp;
     }
 }

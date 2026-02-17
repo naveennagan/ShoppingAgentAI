@@ -32,6 +32,9 @@ build/
 ### VS Code ###
 .vscode/
 
+### jqwik property-based testing ###
+.jqwik-database
+
 ### Environment ###
 .env
 .env.local

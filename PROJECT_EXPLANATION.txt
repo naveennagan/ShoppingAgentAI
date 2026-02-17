@@ -1,0 +1,765 @@
+================================================================================
+                    AI SHOPPING ASSISTANT - COMPLETE PROJECT EXPLANATION
+                    Written as if explaining to someone face-to-face
+================================================================================
+
+Hey! So let me walk you through this project. It's called "AI Shopping Assistant" 
+and it's basically a full-stack e-commerce web application where the main selling 
+point is that there's an AI assistant built right into the shopping experience. 
+Think of it like having a personal shopping helper that can find products for you, 
+add things to your cart, help you checkout, and even give you recommendations — 
+all through a chat interface.
+
+Let me break it down piece by piece.
+
+
+================================================================================
+1. THE BIG PICTURE - WHAT IS THIS PROJECT?
+================================================================================
+
+This is a monorepo containing:
+
+  a) A Next.js 16 frontend (React 19, TypeScript) — the website users see
+  b) A Spring Boot backend (Java 17) — handles data, cart, chat, and AI
+  c) A reusable AI Shopping Assistant npm package — the brain of the AI chat
+  d) MCP (Model Context Protocol) integrations — connects the dev environment 
+     (Kiro IDE) to Slack and AWS Docs for team collaboration
+
+The app sells tech products — headphones, phones, laptops, furniture, accessories, 
+and home goods. There are 24 products across 5 categories, with deals and bundles.
+
+The AI assistant is powered by Google's Gemini AI model. Users can chat with it 
+in natural language and it can:
+  - Search and recommend products
+  - Add items to cart (single or multiple at once)
+  - Remove items or update quantities
+  - Navigate the user to different pages
+  - Autofill the checkout form with shipping details
+  - Answer questions about products, specs, pricing, and deals
+
+
+================================================================================
+2. TECH STACK - WHAT TECHNOLOGIES ARE USED?
+================================================================================
+
+FRONTEND:
+  - Next.js 16 (App Router) — the React framework, handles routing, SSR, etc.
+  - React 19 — the UI library
+  - TypeScript — type-safe JavaScript
+  - Lucide React — icon library (for UI icons like Send, Sparkles, User, Bot)
+  - Zod — runtime schema validation (validates AI responses)
+  - Cheerio — HTML parsing library (used by the AI package for DOM extraction)
+  - SCSS/CSS — styling (mix of CSS modules and global styles)
+  - Google Fonts (Geist, Geist Mono) — typography
+
+BACKEND:
+  - Spring Boot 3.2 — Java web framework
+  - Java 17 — programming language
+  - Maven — build tool and dependency management
+  - Google Gemini AI API — the AI model
+  - Lombok — reduces Java boilerplate
+  - Gson — JSON parsing
+  - SLF4J — logging
+  - ConcurrentHashMap — in-memory data storage (no database yet)
+
+AI PACKAGE:
+  - @google/generative-ai — Google's official Gemini SDK
+  - Zod — response validation
+  - Cheerio — server-side HTML parsing
+
+DEV TOOLS:
+  - Kiro IDE — AI-powered development environment
+  - MCP (Model Context Protocol) — connects Kiro to Slack and AWS Docs
+  - ESLint — code linting
+  - Git — version control
+
+
+================================================================================
+3. PROJECT STRUCTURE - HOW IS THE CODE ORGANIZED?
+================================================================================
+
+Here's the full directory layout with explanations:
+
+
+ROOT/
+├── .env.local                     # Environment variables (API keys, model config)
+├── .env.example                   # Template showing what env vars are needed
+├── .gitignore                     # Files excluded from git
+├── package.json                   # Node.js dependencies and scripts
+├── tsconfig.json                  # TypeScript configuration
+├── next.config.ts                 # Next.js configuration
+├── eslint.config.mjs              # ESLint rules
+├── README.md                      # Project documentation
+│
+├── src/                           # FRONTEND SOURCE CODE
+│   ├── app/                       # Next.js App Router (pages and API routes)
+│   │   ├── page.tsx               # Homepage — hero section + featured products
+│   │   ├── layout.tsx             # Root layout — wraps everything with Navbar,
+│   │   │                            AI Chat Panel, Suggestion Toast, and Providers
+│   │   ├── globals.css            # Global CSS variables and base styles
+│   │   │
+│   │   ├── api/chat/route.ts      # SERVER-SIDE AI chat endpoint
+│   │   │                            Receives user messages, sends to Gemini,
+│   │   │                            returns structured JSON with actions
+│   │   │
+│   │   ├── products/
+│   │   │   ├── page.tsx           # Product listing page — grid of all products
+│   │   │   └── [id]/page.tsx      # Product detail page — specs, description,
+│   │   │                            add to cart button
+│   │   │
+│   │   ├── cart/page.tsx          # Shopping cart — items, quantities, totals,
+│   │   │                            remove/update/clear, proceed to checkout
+│   │   │
+│   │   ├── checkout/
+│   │   │   ├── page.tsx           # 2-step checkout: shipping info → payment
+│   │   │   └── checkout.module.scss  # Checkout-specific styles
+│   │   │
+│   │   └── tracking/[id]/page.tsx # Order tracking page — shows order status
+│   │                                with a timeline (confirmed → shipped → delivered)
+│   │
+│   ├── components/                # REUSABLE UI COMPONENTS
+│   │   ├── Navbar.tsx             # Top navigation bar with logo, links, cart badge,
+│   │   │                            and AI Assistant toggle button
+│   │   ├── AiChatPanel.tsx        # Side panel AI chat — resizable, sends messages
+│   │   │                            to /api/chat, executes actions from AI responses
+│   │   ├── AiChatWidget.tsx       # Floating chat bubble (bottom-right) — alternative
+│   │   │                            chat interface that talks to the Spring Boot backend
+│   │   ├── AiSuggestionToast.tsx  # Toast notification that appears when AI suggests
+│   │   │                            complementary products after adding to cart
+│   │   ├── ProductCard.tsx        # Product card component used in the grid
+│   │   ├── AddToCartButton.tsx    # "Add to Cart" button with visual feedback
+│   │   └── Providers.tsx          # Wraps children with CartProvider context
+│   │
+│   ├── context/
+│   │   └── CartContext.tsx         # React Context for cart state management
+│   │                                Handles add/remove/update/clear operations
+│   │                                Syncs with Spring Boot backend via API calls
+│   │                                Generates AI suggestions on cart changes
+│   │
+│   └── lib/
+│       ├── products.ts            # Product data types and static product catalog
+│       │                            (24 products, 3 deals/bundles)
+│       ├── prompts.ts             # System prompt template for the AI assistant
+│       │                            Defines available actions and response format
+│       ├── api-client.ts          # HTTP client for Spring Boot backend API
+│       │                            Products, Cart, Chat, Chat History endpoints
+│       └── agent/intents.ts       # Rule-based intent detection (fallback for AI)
+│                                    Pattern matching for navigation, cart, search
+│
+├── packages/
+│   └── ai-shopping-assistant/     # STANDALONE AI ASSISTANT NPM PACKAGE
+│       ├── package.json           # Package dependencies
+│       ├── tsconfig.json          # TypeScript config for the package
+│       └── src/
+│           ├── index.ts           # Package entry point — exports everything
+│           ├── AIShoppingAssistant.ts  # MAIN CLASS — orchestrates AI conversations
+│           │                            Manages context, sends to Gemini, validates
+│           │                            responses, executes actions, retry logic
+│           ├── ContextExtractor.ts     # Extracts context from DOM (products, forms,
+│           │                            navigation) — auto-detects website type
+│           ├── SchemaGenerator.ts      # Generates data schemas for AI context
+│           │                            Can use AI to analyze data structure
+│           ├── config.ts               # Default model configuration
+│           ├── prompts.ts              # System prompt templates for the AI
+│           ├── types.ts                # TypeScript interfaces and types
+│           └── useAIAssistant.ts       # React hook for easy integration
+│
+├── shopping-agent-backend/        # SPRING BOOT BACKEND
+│   ├── pom.xml                    # Maven dependencies
+│   └── src/main/java/com/shoppingagent/
+│       ├── controller/
+│       │   ├── ProductController.java      # GET /api/products, GET /api/products/{id}
+│       │   ├── CartController.java         # Cart CRUD operations (session-based)
+│       │   ├── ChatController.java         # POST /api/chat — AI chat endpoint
+│       │   └── ChatHistoryController.java  # Chat history persistence
+│       ├── service/
+│       │   ├── ProductService.java         # 24 products stored in-memory
+│       │   ├── CartService.java            # Cart logic with ConcurrentHashMap
+│       │   ├── GeminiService.java          # Gemini AI API integration
+│       │   └── ChatHistoryService.java     # Chat message storage
+│       └── model/
+│           ├── Product.java, Cart.java, ChatHistory.java
+│           └── ChatRequest.java, ChatResponse.java
+│
+└── .kiro/settings/
+    └── mcp.json                   # MCP server configuration (Slack + AWS Docs)
+
+
+================================================================================
+4. HOW THE AI ASSISTANT WORKS - THE BRAIN OF THE APP
+================================================================================
+
+This is the most interesting part. There are actually TWO AI chat interfaces:
+
+  A) AiChatPanel.tsx — The side panel (uses Next.js API route → Gemini directly)
+  B) AiChatWidget.tsx — The floating bubble (uses Spring Boot backend → Gemini)
+
+Both ultimately talk to Google's Gemini AI, but through different paths.
+
+THE FLOW (Side Panel - AiChatPanel.tsx):
+  1. User types a message like "Show me wireless headphones"
+  2. The component sends a POST request to /api/chat (Next.js API route)
+  3. The API route (src/app/api/chat/route.ts) constructs a system prompt that
+     includes ALL product data, deals, and available actions
+  4. It sends the message + conversation history to Gemini AI
+  5. Gemini responds with structured JSON like:
+     {
+       "action": "navigate",
+       "payload": "/products",
+       "message": "Here are our wireless headphones! We have the Pro Wireless 
+                   Noise-Cancelling Headphones ($299.99) and Sport Wireless 
+                   Earbuds ($89.99)."
+     }
+  6. The frontend parses this JSON and:
+     - Displays the message in the chat
+     - Executes the action (navigates to /products in this case)
+
+THE FLOW (Floating Widget - AiChatWidget.tsx):
+  1. User types a message
+  2. The widget sends a POST to the Spring Boot backend (localhost:8080/api/chat)
+  3. Backend's GeminiService sends it to Gemini with product context
+  4. Same structured JSON response comes back
+  5. Widget executes the action and shows the message
+  6. Chat history is persisted on the backend (session-based)
+
+AVAILABLE AI ACTIONS:
+  - "navigate" → Router.push to any page (/products, /cart, /checkout, etc.)
+  - "add_to_cart" → Adds one or multiple products by ID
+  - "remove_from_cart" → Removes a product from cart
+  - "update_quantity" → Changes quantity of a cart item
+  - "clear_cart" → Empties the entire cart
+  - "autofill_checkout" → Fills in shipping form AND auto-advances to payment
+  - "api_call" → Makes arbitrary API calls (for stock checks, etc.)
+  - "none" → Just responds with text, no action needed
+
+THE SYSTEM PROMPT:
+  The AI gets a carefully crafted system prompt that includes:
+  - All 24 products with IDs, names, prices, categories, specs
+  - All active deals and bundles
+  - Available actions it can trigger
+  - Instructions on how to handle context ("them", "all", "the cheap one")
+  - Rules for flexible search ("phone" matches "smartphone")
+  - JSON output format requirements
+
+RETRY LOGIC:
+  The AIShoppingAssistant class has built-in retry with exponential backoff.
+  If Gemini returns a 429 (rate limit), it waits 1s, then 2s, then 4s before
+  giving up after 3 attempts. This handles temporary quota issues gracefully.
+
+RESPONSE VALIDATION:
+  Every AI response is validated using Zod schema:
+  - Must have "action" (string)
+  - Must have "message" (string)
+  - Optional "payload" (any)
+  - Optional "confidence" (number)
+  If validation fails, a fallback "I had trouble understanding that" message
+  is shown instead of crashing.
+
+
+================================================================================
+5. THE AI SHOPPING ASSISTANT PACKAGE (packages/ai-shopping-assistant/)
+================================================================================
+
+This is designed as a REUSABLE, STANDALONE npm package. The idea is that you
+could drop it into any e-commerce website and it would work. Here's how:
+
+AIShoppingAssistant (Main Class):
+  - Constructor takes config: API key, model name, actions, data providers
+  - initialize() method auto-detects the website context from the DOM
+  - chat() method handles the full conversation flow
+  - registerAction() lets you add new actions dynamically
+  - registerDataProvider() lets you add new data sources
+  - updateContext() refreshes the AI's knowledge (e.g., updated cart)
+
+ContextExtractor:
+  - Scans the DOM for product elements, forms, navigation links
+  - Auto-detects if the website is e-commerce, content, form-based, or general
+  - Uses CSS selectors like [data-product-id], .product, [itemtype*="Product"]
+  - Also has a server-side mode using Cheerio for HTML string parsing
+
+SchemaGenerator:
+  - Infers Zod schemas from arbitrary data structures
+  - Can use AI to analyze data and suggest capabilities
+  - Generates human-readable schema descriptions for the system prompt
+
+useAIAssistant (React Hook):
+  - Wraps AIShoppingAssistant in a React hook
+  - Manages messages state, loading state, error state
+  - Provides sendMessage(), clearMessages(), updateContext() functions
+  - Makes it trivial to integrate into any React component
+
+The package exports everything from index.ts:
+  - AIShoppingAssistant (class)
+  - useAIAssistant (hook)
+  - ContextExtractor (class)
+  - SchemaGenerator (class)
+  - All TypeScript types
+
+
+================================================================================
+6. THE PRODUCT CATALOG
+================================================================================
+
+There are 24 products across 5 categories, all defined in src/lib/products.ts:
+
+ELECTRONICS (11 products):
+  Headphones:
+    - Pro Wireless Noise-Cancelling Headphones ($299.99) — AudioTech
+    - Studio Monitor Headphones ($149.99) — AudioTech
+    - Sport Wireless Earbuds ($89.99) — FitSound
+  Wearables:
+    - Ultra Smart Fitness Watch ($199.50) — FitTech
+    - Classic Analog Smartwatch ($279.00) — TimeTech
+  Phones:
+    - Flagship Smartphone X1 ($999.00) — TechPro
+    - Budget King Smartphone Lite ($499.00) — ValueTech
+    - Compact Pro Smartphone ($749.00) — MiniTech
+  Laptops:
+    - Creator Laptop Pro 16 ($2,499.00) — ProBook
+    - AirLight Laptop 13 ($1,199.00) — AirBook
+    - Gaming Beast Laptop 17 ($1,899.00) — GameForce
+
+FURNITURE (3 products):
+    - Ergonomic Mesh Chair ($349.00) — ComfortPro
+    - Standing Desk Pro ($599.00) — DeskMaster
+    - Monitor Arm Dual Mount ($129.00) — MountTech
+
+ACCESSORIES (5 products):
+    - Waterproof Travel Backpack ($89.99) — TravelGear
+    - Mechanical Gaming Keyboard ($129.99) — KeyMaster
+    - Precision Wireless Mouse ($79.99) — ClickPro
+    - USB-C Hub 7-in-1 ($49.99) — ConnectHub
+    - Webcam 4K Pro ($159.99) — CamTech
+
+HOME (4 products):
+    - Ceramic Coffee Mug Set ($35.00) — HomeStyle
+    - Smart Air Purifier ($159.00) — PureAir
+    - LED Desk Lamp with Wireless Charging ($69.99) — LightUp
+    - Robot Vacuum Cleaner ($299.00) — CleanBot
+
+Each product has: id, name, price, description, category, brand, stock count,
+rating (out of 5), tags (for search), image URL, and technical specs.
+
+DEALS & BUNDLES (3 active):
+  1. "Work From Home Bundle" — Buy Standing Desk + Ergonomic Chair = 20% off
+  2. "Audiophile Starter" — Buy Pro Headphones = 10% off
+  3. "Mobile Power User" — Buy Flagship Phone X1 + Smart Watch = $50 off
+
+
+================================================================================
+7. CART SYSTEM - HOW SHOPPING WORKS
+================================================================================
+
+The cart is managed through React Context (CartContext.tsx) and syncs with the
+Spring Boot backend.
+
+STATE MANAGEMENT:
+  - CartProvider wraps the entire app (via Providers.tsx in layout.tsx)
+  - useCart() hook gives any component access to cart operations
+  - State includes: items (product + quantity), total, count
+
+OPERATIONS:
+  - addToCart(product) — Adds product or increments quantity if already in cart
+  - removeFromCart(productId) — Removes item completely
+  - updateQuantity(productId, quantity) — Sets specific quantity (removes if < 1)
+  - clearCart() — Empties everything
+
+BACKEND SYNC:
+  Every cart operation makes an API call to the Spring Boot backend:
+  - POST /api/cart/{sessionId}/add?productId=X&quantity=1
+  - DELETE /api/cart/{sessionId}/remove/{productId}
+  - DELETE /api/cart/{sessionId}/clear
+  - PUT /api/cart/{sessionId}/update?productId=X&quantity=2
+
+SESSION MANAGEMENT:
+  - A unique session ID is generated on first visit and stored in localStorage
+  - Format: "session_[timestamp]_[random9chars]"
+  - This session ID is used for both cart and chat history on the backend
+  - Data is in-memory on the backend (ConcurrentHashMap) — lost on restart
+
+AI SUGGESTIONS:
+  When a product is added to cart, the CartContext fires off an AI request:
+  - Sends the product name, category, price, and current cart contents
+  - Asks Gemini to suggest 1-2 complementary products in under 25 words
+  - The suggestion appears as a toast notification (AiSuggestionToast)
+  - Clicking the toast opens the AI chat panel for more details
+
+
+================================================================================
+8. CHECKOUT FLOW
+================================================================================
+
+The checkout is a 2-step process in src/app/checkout/page.tsx:
+
+STEP 1 - SHIPPING INFORMATION:
+  - Full Name, Email, Address, City, Zip Code
+  - All fields are required
+  - The AI can autofill this form! If you tell the AI "checkout with my info",
+    it dispatches a CustomEvent('autofill-checkout') with the data
+  - The checkout page listens for this event and fills the form
+  - If no data is provided, it uses defaults (John Doe, 123 AI Boulevard, etc.)
+  - After autofill, it auto-advances to Step 2
+
+STEP 2 - PAYMENT:
+  - Card Number, Cardholder Name, Expiry Date, CVV
+  - Uses TEST CARDS only (no real payment processing):
+    * 4242 4242 4242 4242 / Test User / 12/25 / 123
+    * 5555 5555 5555 4444 / Demo Account / 01/26 / 456
+    * 3782 8224 6310 005 / Mock Payment / 06/27 / 789
+  - Invalid cards show an error message with the test card info
+  - On success: 2-second loading animation → cart cleared → redirect to tracking
+
+ORDER TRACKING:
+  - After successful checkout, user is redirected to /tracking/[orderId]
+  - Order ID is randomly generated (e.g., "A3F2K9")
+  - Shows a timeline: Order Confirmed → Shipped (pending) → Delivered (pending)
+  - The "confirmed=true" query param triggers a green success banner
+
+
+================================================================================
+9. THE SPRING BOOT BACKEND
+================================================================================
+
+Located in shopping-agent-backend/, this is a Java backend that handles:
+
+API ENDPOINTS:
+
+  Products:
+    GET  /api/products          → Returns all 24 products
+    GET  /api/products/{id}     → Returns a single product by ID
+
+  Cart (Session-based):
+    GET  /api/cart/{sessionId}                          → Get cart contents
+    POST /api/cart/{sessionId}/add?productId=X&qty=1    → Add item
+    POST /api/cart/{sessionId}/add-batch                → Add multiple items
+    DEL  /api/cart/{sessionId}/remove/{productId}       → Remove item
+    DEL  /api/cart/{sessionId}/clear                    → Clear cart
+    PUT  /api/cart/{sessionId}/update?productId=X&qty=2 → Update quantity
+
+  Chat:
+    POST /api/chat              → Send message to AI, get structured response
+
+  Chat History (Session-based):
+    GET  /api/chat-history/{sessionId}                  → Get all messages
+    POST /api/chat-history/{sessionId}/add?role=X&text=Y → Save a message
+    DEL  /api/chat-history/{sessionId}/clear            → Clear history
+
+DATA STORAGE:
+  Everything is in-memory using ConcurrentHashMap. There is NO database.
+  This means:
+  - All data is lost when the server restarts
+  - Products are hardcoded in ProductService (same 24 as the frontend)
+  - Cart and chat history are session-scoped
+  - This is intentional for the demo — a database is on the roadmap
+
+GEMINI INTEGRATION:
+  GeminiService.java handles AI communication:
+  - Constructs system prompt with product data
+  - Sends user message + history to Gemini API
+  - Parses JSON response
+  - Returns structured ChatResponse (action, payload, message)
+
+LOGGING:
+  The backend logs every API call with details:
+  - "GET /api/products - Fetching all products"
+  - "POST /api/cart/session_123/add - Adding product: ph-1 (qty: 1)"
+  - "POST /api/chat - Message: Show me phones"
+  - "AI Response - Action: NONE, Message: We have several..."
+
+CORS:
+  Configured to allow requests from localhost:3000 (the Next.js frontend).
+
+
+================================================================================
+10. THE FRONTEND API CLIENT (src/lib/api-client.ts)
+================================================================================
+
+This is the HTTP client that the frontend uses to talk to the Spring Boot backend.
+It's a simple object with async methods:
+
+  apiClient.getProducts()                    → GET /api/products
+  apiClient.getProductById(id)               → GET /api/products/{id}
+  apiClient.chat(message, history)           → POST /api/chat
+  apiClient.getCart(sessionId)               → GET /api/cart/{sessionId}
+  apiClient.addToCart(sessionId, id, qty)    → POST /api/cart/{sessionId}/add
+  apiClient.addBatchToCart(sessionId, ids)   → POST /api/cart/{sessionId}/add-batch
+  apiClient.removeFromCart(sessionId, id)    → DELETE /api/cart/{sessionId}/remove/{id}
+  apiClient.clearCart(sessionId)             → DELETE /api/cart/{sessionId}/clear
+  apiClient.getChatHistory(sessionId)        → GET /api/chat-history/{sessionId}
+  apiClient.addChatMessage(sessionId, role, text) → POST /api/chat-history/{sessionId}/add
+  apiClient.clearChatHistory(sessionId)      → DELETE /api/chat-history/{sessionId}/clear
+
+The base URL comes from NEXT_PUBLIC_API_URL env var (defaults to localhost:8080).
+
+
+================================================================================
+11. UI COMPONENTS - HOW THE INTERFACE WORKS
+================================================================================
+
+LAYOUT (layout.tsx):
+  The root layout wraps everything. It's a client component that manages:
+  - Chat panel open/close state
+  - Chat panel width (for content margin adjustment)
+  - AI suggestion toast visibility
+  - When the chat panel opens, the main content shifts left to make room
+  - The Navbar also adjusts its width to not go behind the panel
+
+NAVBAR (Navbar.tsx):
+  - Logo "AI.Shop" links to homepage
+  - "Products" link
+  - "AI Assistant" button (toggles the chat panel)
+  - Cart icon with badge showing item count
+  - Sticky at the top, adjusts margin when chat panel is open
+
+AI CHAT PANEL (AiChatPanel.tsx):
+  - Fixed position on the right side of the screen
+  - Resizable by dragging the left edge (300px to 800px)
+  - Gradient header with sparkle icon
+  - Scrollable message area with user/bot avatars
+  - Message bubbles styled differently for user (primary color) vs AI (gray)
+  - Typing indicator while AI is processing
+  - Text input with send button at the bottom
+  - Sends messages to /api/chat (Next.js route)
+
+AI CHAT WIDGET (AiChatWidget.tsx):
+  - Floating circular button in bottom-right corner
+  - Expands to a 350x500px chat window
+  - Same chat UI as the panel but in a compact popup
+  - Loads chat history from backend on mount
+  - Saves messages to backend for persistence
+  - Sends messages to Spring Boot backend (not Next.js route)
+
+AI SUGGESTION TOAST (AiSuggestionToast.tsx):
+  - Appears at the top-center of the screen
+  - Shows AI product recommendations after adding to cart
+  - Auto-dismisses after 5 seconds
+  - Has a close button
+  - Styled with a blue gradient background
+
+PRODUCT CARD (ProductCard.tsx):
+  - Displays product image, category, name, description, price
+  - Description is clamped to 2 lines
+  - Links to product detail page
+  - Includes AddToCartButton at the bottom
+
+ADD TO CART BUTTON (AddToCartButton.tsx):
+  - Full-width button
+  - Shows "Add to Cart" normally
+  - Changes to "Added to Cart!" with green background for 2 seconds after click
+  - Uses the useCart() hook to add the product
+
+PROVIDERS (Providers.tsx):
+  - Simple wrapper that provides CartProvider to the entire app
+  - Keeps the layout.tsx cleaner
+
+
+================================================================================
+12. MCP (MODEL CONTEXT PROTOCOL) - DEV TOOLING
+================================================================================
+
+This is not part of the app itself — it's about how we develop the app.
+
+WHAT IS MCP?
+  MCP is an open standard that lets AI assistants (like Kiro) connect to external
+  tools and services. Think of it as USB-C for AI — one protocol, many tools.
+
+HOW WE USE IT:
+  We have two MCP servers configured in .kiro/settings/mcp.json:
+
+  1. AWS Documentation Server (aws-docs):
+     - Lets Kiro search and read AWS documentation
+     - Useful for deployment questions, service lookups
+     - Package: awslabs.aws-documentation-mcp-server
+     - Runs via uvx (Python package runner)
+
+  2. Slack Server (slack):
+     - Lets Kiro read and send Slack messages
+     - We use it for team communication without leaving the IDE
+     - Package: mcp-slack
+     - Requires a Slack Bot Token (xoxb-...)
+     - Bot is invited to specific channels only (privacy control)
+
+THE SLACK WORKFLOW:
+  1. Developer asks Kiro: "Check #social for new messages"
+  2. Kiro calls the Slack MCP tool (get_channel_history)
+  3. MCP server (running locally) calls Slack's Web API
+  4. Messages come back to Kiro
+  5. Kiro can then respond, make code changes based on feedback, etc.
+
+  We've used this to:
+  - Post project status updates to Slack channels
+  - Reply to team questions about the codebase
+  - Tag team members and explain concepts
+  - Post polls for team decisions
+  - Share code structure summaries
+
+CORPORATE PROXY WORKAROUND:
+  Our network has a corporate proxy that intercepts HTTPS with its own certificate.
+  This caused SSL errors. We solved it by:
+  - Adding UV_NATIVE_TLS=true for uvx to use system TLS
+  - Monkey-patching Python's SSL module for the Slack MCP server:
+    "import ssl; ssl._create_default_https_context = ssl._create_unverified_context"
+  - This only affects the MCP server process, not the whole system
+
+MCP CONFIG LOCATIONS:
+  - Workspace: .kiro/settings/mcp.json (project-specific, can be shared via git)
+  - User: ~/.kiro/settings/mcp.json (global, personal, across all projects)
+  - Workspace config overrides user config for same-named servers
+
+
+================================================================================
+13. ENVIRONMENT VARIABLES
+================================================================================
+
+.env.local (gitignored — never committed):
+  GEMINI_API_KEY=<your-key>                    # Server-side Gemini API key
+  NEXT_PUBLIC_GEMINI_API_KEY=<your-key>        # Client-side Gemini API key
+  NEXT_PUBLIC_GEMINI_MODEL=gemini-2.0-flash-lite  # Model for client-side AI
+  GEMINI_MODEL=gemini-2.0-flash-lite           # Model for server-side AI
+  NEXT_PUBLIC_API_URL=http://localhost:8080     # Spring Boot backend URL
+
+.env.example (committed — shows what's needed):
+  GEMINI_API_KEY=your_api_key_here
+  NEXT_PUBLIC_GEMINI_API_KEY=your_api_key_here
+  NEXT_PUBLIC_GEMINI_MODEL=gemini-2.5-flash
+  GEMINI_MODEL=gemini-2.5-flash
+
+WHY TWO API KEYS?
+  - GEMINI_API_KEY is used server-side (in /api/chat/route.ts)
+  - NEXT_PUBLIC_GEMINI_API_KEY is used client-side (in AiChatPanel.tsx)
+  - The NEXT_PUBLIC_ prefix makes it available in the browser
+  - In production, you'd want to only use server-side keys for security
+
+GEMINI MODELS USED:
+  - gemini-2.0-flash-lite — fast, cheap, good for most tasks (current default)
+  - gemini-2.5-flash — newer, more capable
+  - gemini-exp-1206 — experimental (was used before, caused quota issues)
+  - The model is configurable via env vars without code changes
+
+
+================================================================================
+14. HOW TO RUN THE PROJECT
+================================================================================
+
+PREREQUISITES:
+  - Node.js 18+ and npm
+  - Java 17+ and Maven 3.6+
+  - A Gemini API key from https://ai.google.dev/
+
+STEP 1 - BACKEND:
+  cd shopping-agent-backend
+  # Create application.properties from the example
+  cp src/main/resources/application.properties.example \
+     src/main/resources/application.properties
+  # Edit and add your Gemini API key
+  mvn clean install
+  mvn spring-boot:run
+  # Backend runs on http://localhost:8080
+
+STEP 2 - FRONTEND:
+  # In the root directory
+  npm install
+  # Create .env.local with your keys (see section 13)
+  npm run dev
+  # Frontend runs on http://localhost:3000
+
+STEP 3 - OPEN BROWSER:
+  Go to http://localhost:3000
+  - Browse products
+  - Click the AI Assistant button in the navbar
+  - Try chatting: "Show me headphones", "Add the cheap one", "Checkout"
+
+STOPPING:
+  - Backend: Ctrl+C twice, or: kill -9 $(lsof -ti:8080)
+  - Frontend: Ctrl+C, or: kill -9 $(lsof -ti:3000)
+
+
+================================================================================
+15. KNOWN ISSUES AND LIMITATIONS
+================================================================================
+
+1. NO DATABASE — All data is in-memory. Server restart = data lost.
+   This is the #1 item on the roadmap.
+
+2. GEMINI QUOTA — The free tier has strict rate limits. If you hit 429 errors,
+   you need a new API key or billing enabled. The app handles this gracefully
+   with retry logic and user-friendly error messages.
+
+3. NO AUTHENTICATION — Anyone can access any session. No user accounts.
+
+4. NO REAL PAYMENTS — Checkout uses hardcoded test cards only.
+
+5. STATIC PRODUCT DATA — Products are hardcoded in both frontend and backend.
+   No admin panel to add/edit products.
+
+6. NO SEARCH/FILTER — The products page shows all products in a grid.
+   No category filtering, price sorting, or text search (except via AI chat).
+
+7. SSL WORKAROUND — The Slack MCP server disables SSL verification due to
+   corporate proxy issues. This is fine for local dev but not ideal.
+
+8. TWO CHAT INTERFACES — AiChatPanel and AiChatWidget do similar things but
+   talk to different backends. This could be consolidated.
+
+9. DEPRECATED API — React.FormEvent is deprecated in React 19 but still works.
+
+
+================================================================================
+16. ROADMAP - WHAT'S NEXT
+================================================================================
+
+In priority order:
+
+  1. Fix Gemini API quota (new key or billing)
+  2. Add a real database (PostgreSQL or DynamoDB)
+  3. Add search and filter on the products page
+  4. Implement Stripe payment integration
+  5. Add user authentication
+  6. AI recommendations based on browsing history
+  7. Product reviews and ratings system
+  8. Admin panel for product management
+  9. Deploy to production (AWS, Vercel, etc.)
+  10. Consolidate the two chat interfaces
+
+
+================================================================================
+17. SECURITY CONSIDERATIONS
+================================================================================
+
+  - API keys are in .env.local (gitignored) and .kiro/settings/mcp.json (gitignored)
+  - The NEXT_PUBLIC_ Gemini key is exposed to the browser — in production,
+    all AI calls should go through the server-side API route
+  - Slack bot token is in the MCP config — only accessible locally
+  - The Slack bot is limited to specific channels (invited manually)
+  - Test payment cards are hardcoded — no real payment data is processed
+  - No input sanitization on chat messages (potential XSS if rendering HTML)
+  - No rate limiting on the frontend chat (relies on Gemini's own limits)
+  - CORS is configured for localhost only
+
+
+================================================================================
+18. GLOSSARY
+================================================================================
+
+  MCP — Model Context Protocol. Standard for AI-to-tool communication.
+  uvx — Python package runner (part of the "uv" package manager).
+  Gemini — Google's AI model family.
+  Zod — TypeScript-first schema validation library.
+  Cheerio — Server-side HTML parsing library (like jQuery for Node.js).
+  App Router — Next.js routing system using file-based routes in src/app/.
+  SSR — Server-Side Rendering. Pages rendered on the server before sending to browser.
+  Context API — React's built-in state management for sharing data across components.
+  ConcurrentHashMap — Java's thread-safe hash map (used for in-memory storage).
+  xoxb — Slack bot token prefix.
+  SCSS — CSS preprocessor with variables, nesting, and mixins.
+
+
+================================================================================
+                              END OF EXPLANATION
+================================================================================
+
+This document covers every aspect of the project. If someone has a question about
+any part of the codebase, architecture, AI integration, or development workflow,
+the answer should be somewhere in here.
+
+Last updated: February 2026
