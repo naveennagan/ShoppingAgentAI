@@ -72,9 +72,10 @@ public class GeminiService {
                "CAPABILITIES:\n" +
                "- Search and recommend products based on user queries\n" +
                "- Add products to cart by ID\n" +
-               "- Navigate to specific pages (/products, /cart, /checkout)\n" +
+               "- Navigate to specific pages (/products, /cart, /checkout, /orders)\n" +
                "- Clear cart contents\n" +
-               "- Autofill checkout with user data\n\n" +
+               "- Autofill checkout with user data\n" +
+               "- Show user order history\n\n" +
                "RESPONSE FORMAT:\n" +
                "You MUST respond with a JSON object containing:\n" +
                "{\"action\": \"NAVIGATE\" | \"ADD_TO_CART\" | \"CLEAR_CART\" | \"AUTOFILL_CHECKOUT\" | \"NONE\", " +
@@ -84,6 +85,7 @@ public class GeminiService {
                "User: \"Show me phones\" → {\"action\":\"NONE\",\"payload\":null,\"message\":\"Here are our phones: [list products]\"}\n" +
                "User: \"Add iPhone to cart\" → {\"action\":\"ADD_TO_CART\",\"payload\":\"1\",\"message\":\"Added iPhone to your cart!\"}\n" +
                "User: \"Go to checkout\" → {\"action\":\"NAVIGATE\",\"payload\":\"/checkout\",\"message\":\"Taking you to checkout...\"}\n" +
+               "User: \"Show my orders\" → {\"action\":\"NAVIGATE\",\"payload\":\"/orders\",\"message\":\"Here are your orders...\"}\n" +
                "User: \"Clear my cart\" → {\"action\":\"CLEAR_CART\",\"payload\":null,\"message\":\"Cart cleared!\"}";
     }
     
