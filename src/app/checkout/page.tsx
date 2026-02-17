@@ -70,7 +70,7 @@ export default function CheckoutPage() {
         setStep(2);
     };
 
-    const handlePlaceOrder = () => {
+    const handlePlaceOrder = async () => {
         const validCards = [
             { number: '4242424242424242', name: 'Test User', expiry: '12/25', cvv: '123' },
             { number: '5555555555554444', name: 'Demo Account', expiry: '01/26', cvv: '456' },
@@ -90,11 +90,36 @@ export default function CheckoutPage() {
         }
 
         setLoading(true);
-        setTimeout(() => {
+        
+        try {
+            // Get session ID
+            let sessionId = localStorage.getItem('sessionId');
+            if (!sessionId) {
+                sessionId = 'user123';
+                localStorage.setItem('sessionId', sessionId);
+            }
+            
+            // Create order via backend API
+            const shippingAddress = `${formData.address}, ${formData.city}, ${formData.zip}`;
+            const response = await fetch(`http://localhost:8080/api/orders?sessionId=${sessionId}&shippingAddress=${encodeURIComponent(shippingAddress)}&paymentMethod=Credit Card`, {
+                method: 'POST'
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to create order');
+            }
+            
+            const order = await response.json();
+            console.log('Order created:', order);
+            
+            // Clear cart and redirect
             clearCart();
-            const orderId = Math.random().toString(36).substring(7).toUpperCase();
-            router.push(`/tracking/${orderId}?confirmed=true`);
-        }, 2000);
+            router.push(`/tracking/${order.orderId}?confirmed=true`);
+        } catch (error) {
+            console.error('Order creation failed:', error);
+            setError('Failed to place order. Please try again.');
+            setLoading(false);
+        }
     };
 
     return (
