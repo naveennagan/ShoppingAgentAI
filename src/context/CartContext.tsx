@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Product } from '@/lib/products';
+import { Product, CouponValidationResult } from '@/lib/products';
 import { apiClient } from '@/lib/api-client';
 
 const SESSION_ID = typeof window !== 'undefined' ? (localStorage.getItem('sessionId') || (() => {
@@ -50,6 +50,9 @@ interface CartContextType {
     clearCart: () => void;
     total: number;
     count: number;
+    appliedCoupon: CouponValidationResult | null;
+    applyCoupon: (code: string) => Promise<void>;
+    removeCoupon: () => void;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -57,6 +60,7 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 export function CartProvider({ children }: { children: ReactNode }) {
     const [items, setItems] = useState<CartItem[]>([]);
     const [isInitialized, setIsInitialized] = useState(false);
+    const [appliedCoupon, setAppliedCoupon] = useState<CouponValidationResult | null>(null);
 
     // Load cart from backend on mount
     useEffect(() => {
@@ -134,8 +138,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
     const total = items.reduce((sum: number, item: CartItem) => sum + (item.product.price * item.quantity), 0);
     const count = items.reduce((sum: number, item: CartItem) => sum + item.quantity, 0);
 
+    const applyCoupon = async (code: string) => {
+        const productIds = items.map(i => i.product.id);
+        const result = await apiClient.validateCouponCode(code.trim(), productIds);
+        setAppliedCoupon(result);
+    };
+
+    const removeCoupon = () => setAppliedCoupon(null);
+
     return (
-        <CartContext.Provider value={{ items, addToCart, removeFromCart, updateQuantity, clearCart, total, count }}>
+        <CartContext.Provider value={{ items, addToCart, removeFromCart, updateQuantity, clearCart, total, count, appliedCoupon, applyCoupon, removeCoupon }}>
             {children}
         </CartContext.Provider>
     );
