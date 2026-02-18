@@ -99,5 +99,19 @@ export const apiClient = {
     const res = await fetch(`${API_URL}/api/bundles/active`);
     if (!res.ok) return [];
     return res.json();
+  },
+
+  // Coupon APIs
+  async validateCouponCode(code: string, productIds: string[]) {
+    const res = await fetch(`${API_URL}/api/promotions/validate-code`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, productIds })
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || 'Failed to validate coupon code');
+    }
+    return res.json();
   }
 };

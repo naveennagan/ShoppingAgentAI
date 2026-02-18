@@ -33,6 +33,14 @@ export interface BundleItem {
     createdAt: string;
 }
 
+export interface CouponValidationResult {
+    promotionId: string;
+    promotionName: string;
+    discountType: 'percentage' | 'fixed_amount';
+    discountValue: number;
+    applicableProductIds: string[];
+}
+
 export interface Bundle {
     id: string;
     name: string;

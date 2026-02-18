@@ -323,7 +323,7 @@ async function main() {
       promo_code: "SUMMER15",
       start_date: "2026-06-01T00:00:00Z",
       end_date: "2026-08-31T23:59:59Z",
-      promotional_label: "Summer Sale",
+      promotional_label: null,
       is_active: true,
     },
     {
@@ -334,7 +334,7 @@ async function main() {
       promo_code: "WELCOME20",
       start_date: "2026-01-01T00:00:00Z",
       end_date: "2026-12-31T23:59:59Z",
-      promotional_label: "New Customer Deal",
+      promotional_label: null,
       is_active: true,
     },
     {
@@ -353,7 +353,7 @@ async function main() {
       description: "Extra £50 off when you trade in any old phone for an iPhone",
       discount_type: "fixed_amount",
       discount_value: 50,
-      promo_code: "APPLETRADE",
+      promo_code: null,
       start_date: "2026-01-01T00:00:00Z",
       end_date: "2026-06-30T23:59:59Z",
       promotional_label: "Trade-In Bonus",
@@ -367,7 +367,7 @@ async function main() {
       promo_code: "PIXEL5",
       start_date: "2026-02-01T00:00:00Z",
       end_date: "2026-04-30T23:59:59Z",
-      promotional_label: "Launch Offer",
+      promotional_label: null,
       is_active: false,
     },
   ];
@@ -383,22 +383,26 @@ async function main() {
   const applePromo = insertedPromos[3];
   const pixelPromo = insertedPromos[4];
 
+  // Direct promotions: limit to ~10 products each (~20 total with visible labels)
+  const samsungProducts = insertedProducts.filter(p => p.brand === "Samsung").slice(0, 10);
+  const appleProducts = insertedProducts.filter(p => p.brand === "Apple").slice(0, 10);
+
+  for (const p of samsungProducts) {
+    promoLinks.push({ product_id: p.id, promotion_id: samsungPromo.id });
+  }
+  for (const p of appleProducts) {
+    promoLinks.push({ product_id: p.id, promotion_id: applePromo.id });
+  }
+
+  // Coupon promotions: link to broader product sets (no promotional_label shown on cards)
   for (const p of insertedProducts) {
-    // Summer sale: applies to mid-range phones (price < 700)
+    // Summer sale (SUMMER15): mid-range phones (price < 700)
     if (p.price < 700) {
       promoLinks.push({ product_id: p.id, promotion_id: summerPromo.id });
     }
-    // Welcome promo: applies to all phones
+    // Welcome promo (WELCOME20): all phones
     promoLinks.push({ product_id: p.id, promotion_id: welcomePromo.id });
-    // Samsung flash deal
-    if (p.brand === "Samsung") {
-      promoLinks.push({ product_id: p.id, promotion_id: samsungPromo.id });
-    }
-    // Apple trade-in
-    if (p.brand === "Apple") {
-      promoLinks.push({ product_id: p.id, promotion_id: applePromo.id });
-    }
-    // Pixel launch
+    // Pixel launch (PIXEL5): Pixel 9 series
     if (p.brand === "Google" && p.name.includes("9")) {
       promoLinks.push({ product_id: p.id, promotion_id: pixelPromo.id });
     }

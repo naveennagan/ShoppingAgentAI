@@ -18,7 +18,7 @@ export default function ProductCard({ product }: ProductCardProps) {
         apiClient.getPromotionsForProduct(product.id).then(setPromotions).catch(() => {});
     }, [product.id]);
 
-    const activePromo = promotions.find(p => p.active);
+    const activePromo = promotions.find(p => p.active && !p.promoCode);
     const discountedPrice = activePromo
         ? calculateDiscountedPrice(product.price, activePromo.discountType, activePromo.discountValue)
         : null;

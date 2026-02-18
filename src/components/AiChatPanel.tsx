@@ -13,6 +13,66 @@ interface AiChatPanelProps {
     onWidthChange: (width: number) => void;
 }
 
+/** A message in the chat, optionally carrying suggested products to render as cards */
+interface ChatMessage {
+    role: 'user' | 'ai';
+    text: string;
+    suggestions?: Product[];
+}
+
+/** Compact product card rendered inside the chat panel */
+function SuggestionCard({ product }: { product: Product }) {
+    const { addToCart } = useCart();
+    return (
+        <div style={{
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: '10px',
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+            width: '140px',
+            flexShrink: 0,
+            boxShadow: 'var(--shadow-sm)'
+        }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+                src={product.image}
+                alt={product.name}
+                style={{ width: '100%', height: '90px', objectFit: 'cover', background: '#f3f4f6' }}
+            />
+            <div style={{ padding: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', flex: 1 }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, lineHeight: 1.3, color: '#1f2937',
+                    display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                    {product.name}
+                </span>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary)' }}>
+                    £{product.price.toFixed(2)}
+                </span>
+                <button
+                    onClick={() => addToCart(product)}
+                    style={{
+                        marginTop: 'auto',
+                        padding: '0.3rem 0.5rem',
+                        background: 'var(--primary)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontSize: '0.7rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.25rem'
+                    }}
+                >
+                    <ShoppingCart size={11} /> Add
+                </button>
+            </div>
+        </div>
+    );
+}
+
 /**
  * AiChatPanel — A resizable side panel that provides an AI-powered chat interface.
  * Uses the AIShoppingAssistant package to handle conversations, product lookups,
@@ -20,7 +80,7 @@ interface AiChatPanelProps {
  */
 export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPanelProps) {
     // Chat state: message history and current input
-    const [messages, setMessages] = useState<{ role: 'user' | 'ai', text?: string, products?: any[] }[]>([
+    const [messages, setMessages] = useState<ChatMessage[]>([
         { role: 'ai', text: 'Hi! I can help you find products or check your order. Try saying "Show me headphones".' }
     ]);
     const [input, setInput] = useState('');
@@ -30,7 +90,7 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
     const [isResizing, setIsResizing] = useState(false);
 
     const router = useRouter();
-    const { addToCart, clearCart, updateQuantity, removeFromCart, items: cart } = useCart();
+    const { addToCart, clearCart, updateQuantity, removeFromCart, items: cart, applyCoupon, removeCoupon } = useCart();
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const panelRef = useRef<HTMLDivElement>(null);
 
@@ -89,11 +149,30 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
             const response = await fetch('http://localhost:8080/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: input, history })
+                body: JSON.stringify({
+                    message: input,
+                    history,
+                    cartItems: cart.map(i => ({
+                        productId: i.product.id,
+                        name: i.product.name,
+                        price: i.product.price,
+                        quantity: i.quantity
+                    }))
+                })
             });
 
             const data = await response.json();
             
+            // Resolve suggestion IDs to full product objects (if any)
+            let suggestions: Product[] | undefined;
+            if (Array.isArray(data.suggestions) && data.suggestions.length > 0) {
+                const { apiClient } = await import('@/lib/api-client');
+                const allProducts: Product[] = await apiClient.getProducts();
+                suggestions = data.suggestions
+                    .map((id: string) => allProducts.find((p: Product) => String(p.id) === String(id)))
+                    .filter(Boolean) as Product[];
+            }
+
             // Execute action
             if (data.action === 'NAVIGATE') {
                 router.push(data.payload);
@@ -103,17 +182,30 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
                 if (product) addToCart(product);
             } else if (data.action === 'CLEAR_CART') {
                 clearCart();
-            } else if (data.action === 'SHOW_PRODUCTS') {
-                const productIds = data.payload.split(',').map((id: string) => id.trim());
-                const productPromises = productIds.map((id: string) => 
-                    fetch(`http://localhost:8080/api/products/${id}`).then(res => res.json())
-                );
-                const products = await Promise.all(productPromises);
-                setMessages(prev => [...prev, { role: 'ai', text: data.message, products }]);
-                return;
+            } else if (data.action === 'update_quantity') {
+                updateQuantity(data.payload.productId, data.payload.quantity);
+            } else if (data.action === 'set_all_quantities') {
+                cart.forEach(item => updateQuantity(item.product.id, data.payload.quantity));
+            } else if (data.action === 'remove_from_cart') {
+                removeFromCart(data.payload);
+            } else if (data.action === 'autofill_checkout') {
+                const event = new CustomEvent('autofill-checkout', { detail: data.payload || {} });
+                window.dispatchEvent(event);
+                setTimeout(() => router.push('/checkout'), 100);
+            } else if (data.action === 'apply_coupon' && data.payload?.code) {
+                try {
+                    await applyCoupon(data.payload.code);
+                } catch (err: unknown) {
+                    const errMsg = err instanceof Error ? err.message : 'Failed to apply coupon';
+                    setMessages(prev => [...prev, { role: 'ai', text: `Hmm, couldn't apply that code: ${errMsg}` }]);
+                    setIsTyping(false);
+                    return;
+                }
+            } else if (data.action === 'remove_coupon') {
+                removeCoupon();
             }
 
-            setMessages(prev => [...prev, { role: 'ai', text: data.message }]);
+            setMessages(prev => [...prev, { role: 'ai', text: data.message, suggestions }]);
         } catch (error) {
             console.error('Chat error:', error);
             setMessages(prev => [...prev, { role: 'ai', text: "Sorry, I encountered an issue." }]);
@@ -201,26 +293,33 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
                             }}>
                                 {msg.role === 'user' ? <User size={14} color="white" /> : <Bot size={14} color="#374151" />}
                             </div>
-                            {/* Message bubble with role-based styling */}
-                            <div style={{
-                                background: msg.role === 'user' ? 'var(--primary)' : '#f3f4f6',
-                                color: msg.role === 'user' ? 'white' : '#1f2937',
-                                padding: '0.75rem 1rem',
-                                borderRadius: '1rem',
-                                borderTopRightRadius: msg.role === 'user' ? '4px' : '1rem',
-                                borderTopLeftRadius: msg.role === 'ai' ? '4px' : '1rem',
-                                boxShadow: 'var(--shadow-sm)',
-                                fontSize: '0.95rem',
-                                lineHeight: 1.5,
-                                border: msg.role === 'ai' ? '1px solid #e5e7eb' : 'none'
-                            }}>
-                                {msg.text}
-                                {msg.products && (
-                                    <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                        {msg.products.map(product => (
-                                            <div key={product.id} style={{ transform: 'scale(0.9)', transformOrigin: 'left top' }}>
-                                                <ProductWidget product={product} />
-                                            </div>
+                            {/* Message bubble + optional suggestion cards */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', minWidth: 0 }}>
+                                <div style={{
+                                    background: msg.role === 'user' ? 'var(--primary)' : '#f3f4f6',
+                                    color: msg.role === 'user' ? 'white' : '#1f2937',
+                                    padding: '0.75rem 1rem',
+                                    borderRadius: '1rem',
+                                    borderTopRightRadius: msg.role === 'user' ? '4px' : '1rem',
+                                    borderTopLeftRadius: msg.role === 'ai' ? '4px' : '1rem',
+                                    boxShadow: 'var(--shadow-sm)',
+                                    fontSize: '0.95rem',
+                                    lineHeight: 1.5,
+                                    border: msg.role === 'ai' ? '1px solid #e5e7eb' : 'none'
+                                }}>
+                                    {msg.text}
+                                </div>
+                                {/* Suggestion product cards — horizontal scroll row */}
+                                {msg.suggestions && msg.suggestions.length > 0 && (
+                                    <div style={{
+                                        display: 'flex',
+                                        gap: '0.5rem',
+                                        overflowX: 'auto',
+                                        paddingBottom: '0.25rem',
+                                        scrollbarWidth: 'thin'
+                                    }}>
+                                        {msg.suggestions.map(product => (
+                                            <SuggestionCard key={product.id} product={product} />
                                         ))}
                                     </div>
                                 )}
