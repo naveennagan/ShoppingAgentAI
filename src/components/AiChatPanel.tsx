@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCart } from '@/context/CartContext';
 import { X, Send, Sparkles, User, Bot } from 'lucide-react';
+import ProductWidget from './ProductWidget';
 
 /** Props for the AI Chat Panel component */
 interface AiChatPanelProps {
@@ -19,7 +20,7 @@ interface AiChatPanelProps {
  */
 export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPanelProps) {
     // Chat state: message history and current input
-    const [messages, setMessages] = useState<{ role: 'user' | 'ai', text: string }[]>([
+    const [messages, setMessages] = useState<{ role: 'user' | 'ai', text?: string, products?: any[] }[]>([
         { role: 'ai', text: 'Hi! I can help you find products or check your order. Try saying "Show me headphones".' }
     ]);
     const [input, setInput] = useState('');
@@ -85,7 +86,7 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
                 text: m.text
             }));
 
-            const response = await fetch('/api/chat', {
+            const response = await fetch('http://localhost:8080/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ message: input, history })
@@ -94,28 +95,22 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
             const data = await response.json();
             
             // Execute action
-            if (data.action === 'navigate') {
+            if (data.action === 'NAVIGATE') {
                 router.push(data.payload);
-            } else if (data.action === 'add_to_cart') {
-                const { apiClient } = await import('@/lib/api-client');
-                const products = await apiClient.getProducts();
-                const productIds = Array.isArray(data.payload) ? data.payload : [data.payload];
-                for (const productId of productIds) {
-                    const product = products.find((p: any) => String(p.id) === String(productId));
-                    if (product) addToCart(product);
-                }
-            } else if (data.action === 'clear_cart') {
+            } else if (data.action === 'ADD_TO_CART') {
+                const productResponse = await fetch(`http://localhost:8080/api/products/${data.payload}`);
+                const product = await productResponse.json();
+                if (product) addToCart(product);
+            } else if (data.action === 'CLEAR_CART') {
                 clearCart();
-            } else if (data.action === 'update_quantity') {
-                updateQuantity(data.payload.productId, data.payload.quantity);
-            } else if (data.action === 'set_all_quantities') {
-                cart.forEach(item => updateQuantity(item.product.id, data.payload.quantity));
-            } else if (data.action === 'remove_from_cart') {
-                removeFromCart(data.payload);
-            } else if (data.action === 'autofill_checkout') {
-                const event = new CustomEvent('autofill-checkout', { detail: data.payload || {} });
-                window.dispatchEvent(event);
-                setTimeout(() => router.push('/checkout'), 100);
+            } else if (data.action === 'SHOW_PRODUCTS') {
+                const productIds = data.payload.split(',').map((id: string) => id.trim());
+                const productPromises = productIds.map((id: string) => 
+                    fetch(`http://localhost:8080/api/products/${id}`).then(res => res.json())
+                );
+                const products = await Promise.all(productPromises);
+                setMessages(prev => [...prev, { role: 'ai', text: data.message, products }]);
+                return;
             }
 
             setMessages(prev => [...prev, { role: 'ai', text: data.message }]);
@@ -220,6 +215,15 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
                                 border: msg.role === 'ai' ? '1px solid #e5e7eb' : 'none'
                             }}>
                                 {msg.text}
+                                {msg.products && (
+                                    <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                        {msg.products.map(product => (
+                                            <div key={product.id} style={{ transform: 'scale(0.9)', transformOrigin: 'left top' }}>
+                                                <ProductWidget product={product} />
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     ))}
