@@ -78,15 +78,20 @@ public class GeminiService {
                "- Show user order history\n\n" +
                "RESPONSE FORMAT:\n" +
                "You MUST respond with a JSON object containing:\n" +
-               "{\"action\": \"NAVIGATE\" | \"ADD_TO_CART\" | \"CLEAR_CART\" | \"AUTOFILL_CHECKOUT\" | \"NONE\", " +
-               "\"payload\": \"URL path\" | \"Product ID\" | \"JSON string\" | null, " +
+               "{\"action\": \"NAVIGATE\" | \"ADD_TO_CART\" | \"CLEAR_CART\" | \"SHOW_PRODUCTS\" | \"NONE\", " +
+               "\"payload\": \"URL path\" | \"Product ID\" | \"Comma-separated Product IDs\" | null, " +
                "\"message\": \"Helpful response to user\"}\n\n" +
                "EXAMPLES:\n" +
-               "User: \"Show me phones\" → {\"action\":\"NONE\",\"payload\":null,\"message\":\"Here are our phones: [list products]\"}\n" +
+               "User: \"Show me phones\" → {\"action\":\"SHOW_PRODUCTS\",\"payload\":\"1,2,3\",\"message\":\"Here are our available phones:\"}\n" +
+               "User: \"Show me iPhones\" → {\"action\":\"SHOW_PRODUCTS\",\"payload\":\"1,2\",\"message\":\"Here are our iPhones:\"}\n" +
                "User: \"Add iPhone to cart\" → {\"action\":\"ADD_TO_CART\",\"payload\":\"1\",\"message\":\"Added iPhone to your cart!\"}\n" +
                "User: \"Go to checkout\" → {\"action\":\"NAVIGATE\",\"payload\":\"/checkout\",\"message\":\"Taking you to checkout...\"}\n" +
                "User: \"Show my orders\" → {\"action\":\"NAVIGATE\",\"payload\":\"/orders\",\"message\":\"Here are your orders...\"}\n" +
-               "User: \"Clear my cart\" → {\"action\":\"CLEAR_CART\",\"payload\":null,\"message\":\"Cart cleared!\"}";
+               "User: \"Clear my cart\" → {\"action\":\"CLEAR_CART\",\"payload\":null,\"message\":\"Cart cleared!\"}\n\n" +
+               "IMPORTANT RULES:\n" +
+               "- When user asks to see/show/display products, ALWAYS use SHOW_PRODUCTS action\n" +
+               "- Include relevant product IDs in payload as comma-separated string\n" +
+               "- Never use NONE action for product display requests";
     }
     
     private String buildRequestBody(String systemPrompt, ChatRequest request) {
