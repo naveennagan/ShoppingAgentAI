@@ -3,184 +3,103 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCart } from '@/context/CartContext';
-import { X, Send, Sparkles, User, Bot } from 'lucide-react';
-import ProductWidget from './ProductWidget';
+import { X, Send, Sparkles, ShoppingCart, Tag } from 'lucide-react';
+import { Product } from '@/lib/products';
+import { ChatBubble, Chip, ComparisonTable, SuggestionCard, TypingIndicator } from './ui';
 
-/** Props for the AI Chat Panel component */
 interface AiChatPanelProps {
     isOpen: boolean;
     onClose: () => void;
     onWidthChange: (width: number) => void;
 }
 
-/** A message in the chat, optionally carrying suggested products to render as cards */
 interface ChatMessage {
     role: 'user' | 'ai';
     text: string;
     suggestions?: Product[];
+    comparison?: {
+        products: string[];
+        rows: { field: string; values: string[] }[];
+    };
 }
 
-/** Compact product card rendered inside the chat panel */
-function SuggestionCard({ product }: { product: Product }) {
-    const { addToCart } = useCart();
-    return (
-        <div style={{
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: '10px',
-            overflow: 'hidden',
-            display: 'flex',
-            flexDirection: 'column',
-            width: '140px',
-            flexShrink: 0,
-            boxShadow: 'var(--shadow-sm)'
-        }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-                src={product.image}
-                alt={product.name}
-                style={{ width: '100%', height: '90px', objectFit: 'cover', background: '#f3f4f6' }}
-            />
-            <div style={{ padding: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', flex: 1 }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: 600, lineHeight: 1.3, color: '#1f2937',
-                    display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                    {product.name}
-                </span>
-                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary)' }}>
-                    £{product.price.toFixed(2)}
-                </span>
-                <button
-                    onClick={() => addToCart(product)}
-                    style={{
-                        marginTop: 'auto',
-                        padding: '0.3rem 0.5rem',
-                        background: 'var(--primary)',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '6px',
-                        fontSize: '0.7rem',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.25rem'
-                    }}
-                >
-                    <ShoppingCart size={11} /> Add
-                </button>
-            </div>
-        </div>
-    );
-}
+const QUICK_ACTIONS = [
+    { label: '🔥 Best deals', msg: 'Show me products with the best deals' },
+    { label: '📱 Phones', msg: 'Show me all phones' },
+    { label: '🛒 My cart', msg: 'What is in my cart?' },
+    { label: '🏷️ Apply coupon', msg: 'Can you apply a coupon for my cart?' },
+];
 
-/**
- * AiChatPanel — A resizable side panel that provides an AI-powered chat interface.
- * Uses the AIShoppingAssistant package to handle conversations, product lookups,
- * cart operations, and navigation actions via Gemini AI.
- */
 export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPanelProps) {
-    // Chat state: message history and current input
     const [messages, setMessages] = useState<ChatMessage[]>([
-        { role: 'ai', text: 'Hi! I can help you find products or check your order. Try saying "Show me headphones".' }
+        { role: 'ai', text: 'Hi! I\'m your AI shopping assistant. Ask me about products, deals, or let me help manage your cart.' }
     ]);
     const [input, setInput] = useState('');
     const [isTyping, setIsTyping] = useState(false);
-
-    const [panelWidth, setPanelWidth] = useState(400);
+    const [panelWidth, setPanelWidth] = useState(420);
     const [isResizing, setIsResizing] = useState(false);
+    const [showQuickActions, setShowQuickActions] = useState(true);
 
     const router = useRouter();
     const { addToCart, clearCart, updateQuantity, removeFromCart, items: cart, applyCoupon, removeCoupon } = useCart();
     const messagesEndRef = useRef<HTMLDivElement>(null);
-    const panelRef = useRef<HTMLDivElement>(null);
 
-    // Auto-scroll to the latest message when messages update
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [messages]);
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [messages, isTyping]);
 
-    /**
-     * Handle panel resize via mouse drag on the left edge.
-     * Clamps width between 300px and 800px.
-     */
     useEffect(() => {
         if (!isResizing) return;
-
-        const handleMouseMove = (e: MouseEvent) => {
-            const newWidth = window.innerWidth - e.clientX;
-            const clampedWidth = Math.max(300, Math.min(800, newWidth));
-            setPanelWidth(clampedWidth);
-            onWidthChange(clampedWidth);
+        const onMove = (e: MouseEvent) => {
+            const w = Math.max(360, Math.min(800, window.innerWidth - e.clientX));
+            setPanelWidth(w);
+            onWidthChange(w);
         };
+        const onUp = () => setIsResizing(false);
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+        return () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+    }, [isResizing, onWidthChange]);
 
-        const handleMouseUp = () => {
-            setIsResizing(false);
-        };
-
-        document.addEventListener('mousemove', handleMouseMove);
-        document.addEventListener('mouseup', handleMouseUp);
-
-        return () => {
-            document.removeEventListener('mousemove', handleMouseMove);
-            document.removeEventListener('mouseup', handleMouseUp);
-        };
-    }, [isResizing]);
-
-    /**
-     * Handle chat form submission.
-     * Sends the user message to the AI assistant, updates chat history,
-     * and displays the AI response. Keeps last 10 messages as context.
-     */
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!input.trim()) return;
-
-        const userMessage = { role: 'user' as const, text: input };
-        setMessages(prev => [...prev, userMessage]);
+    const sendMessage = async (text: string) => {
+        if (!text.trim()) return;
+        setShowQuickActions(false);
+        setMessages(prev => [...prev, { role: 'user', text }]);
         setInput('');
         setIsTyping(true);
 
         try {
-            const history = messages.slice(-10).map(m => ({
-                role: m.role === 'user' ? 'user' : 'ai',
-                text: m.text
-            }));
-
-            const response = await fetch('http://localhost:8080/api/chat', {
+            const history = messages.slice(-10).map(m => ({ role: m.role === 'user' ? 'user' : 'ai', text: m.text }));
+            const res = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    message: input,
-                    history,
-                    cartItems: cart.map(i => ({
-                        productId: i.product.id,
-                        name: i.product.name,
-                        price: i.product.price,
-                        quantity: i.quantity
-                    }))
+                    message: text, history,
+                    cartItems: cart.map(i => ({ productId: i.product.id, name: i.product.name, price: i.product.price, quantity: i.quantity }))
                 })
             });
+            const data = await res.json();
 
-            const data = await response.json();
-            
-            // Resolve suggestion IDs to full product objects (if any)
             let suggestions: Product[] | undefined;
             if (Array.isArray(data.suggestions) && data.suggestions.length > 0) {
                 const { apiClient } = await import('@/lib/api-client');
-                const allProducts: Product[] = await apiClient.getProducts();
+                const all: Product[] = await apiClient.getProducts();
                 suggestions = data.suggestions
-                    .map((id: string) => allProducts.find((p: Product) => String(p.id) === String(id)))
+                    .map((id: string) => all.find(p => String(p.id) === String(id)))
                     .filter(Boolean) as Product[];
             }
 
-            // Execute action
-            if (data.action === 'NAVIGATE') {
+            if (data.action === 'navigate') {
                 router.push(data.payload);
-            } else if (data.action === 'ADD_TO_CART') {
-                const productResponse = await fetch(`http://localhost:8080/api/products/${data.payload}`);
-                const product = await productResponse.json();
-                if (product) addToCart(product);
-            } else if (data.action === 'CLEAR_CART') {
+            } else if (data.action === 'add_to_cart') {
+                const { apiClient } = await import('@/lib/api-client');
+                const all = await apiClient.getProducts();
+                const ids = Array.isArray(data.payload) ? data.payload : [data.payload];
+                for (const id of ids) {
+                    const p = all.find((p: Product) => String(p.id) === String(id));
+                    if (p) addToCart(p);
+                }
+            } else if (data.action === 'clear_cart') {
                 clearCart();
             } else if (data.action === 'update_quantity') {
                 updateQuantity(data.payload.productId, data.payload.quantity);
@@ -189,15 +108,14 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
             } else if (data.action === 'remove_from_cart') {
                 removeFromCart(data.payload);
             } else if (data.action === 'autofill_checkout') {
-                const event = new CustomEvent('autofill-checkout', { detail: data.payload || {} });
-                window.dispatchEvent(event);
+                window.dispatchEvent(new CustomEvent('autofill-checkout', { detail: data.payload || {} }));
                 setTimeout(() => router.push('/checkout'), 100);
             } else if (data.action === 'apply_coupon' && data.payload?.code) {
                 try {
                     await applyCoupon(data.payload.code);
-                } catch (err: unknown) {
-                    const errMsg = err instanceof Error ? err.message : 'Failed to apply coupon';
-                    setMessages(prev => [...prev, { role: 'ai', text: `Hmm, couldn't apply that code: ${errMsg}` }]);
+                } catch (err) {
+                    const msg = err instanceof Error ? err.message : 'Failed to apply coupon';
+                    setMessages(prev => [...prev, { role: 'ai', text: `Couldn't apply that code: ${msg}` }]);
                     setIsTyping(false);
                     return;
                 }
@@ -205,165 +123,147 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
                 removeCoupon();
             }
 
-            setMessages(prev => [...prev, { role: 'ai', text: data.message, suggestions }]);
-        } catch (error) {
-            console.error('Chat error:', error);
-            setMessages(prev => [...prev, { role: 'ai', text: "Sorry, I encountered an issue." }]);
+            setMessages(prev => [...prev, { role: 'ai', text: data.message, suggestions, comparison: data.comparison }]);
+        } catch {
+            setMessages(prev => [...prev, { role: 'ai', text: 'Sorry, something went wrong.' }]);
         } finally {
             setIsTyping(false);
         }
     };
 
-    // Don't render anything if the panel is closed
+    const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); sendMessage(input); };
+
     if (!isOpen) return null;
 
     return (
-        <div
-            ref={panelRef}
-            style={{
-                position: 'fixed',
-                top: 0,
-                right: 0,
-                bottom: 0,
-                width: `${panelWidth}px`,
-                background: 'var(--surface)',
-                borderLeft: '1px solid var(--border)',
-                zIndex: 1000,
-                display: 'flex',
-                flexDirection: 'column',
-                boxShadow: '-4px 0 12px rgba(0, 0, 0, 0.1)'
-            }}
-        >
-                {/* Resize handle — drag left edge to resize panel */}
-                <div
-                    style={{
-                        position: 'absolute',
-                        left: 0,
-                        top: 0,
-                        bottom: 0,
-                        width: '4px',
-                        cursor: 'ew-resize',
-                        background: isResizing ? 'var(--primary)' : 'transparent',
-                        transition: 'background 0.2s'
-                    }}
-                    onMouseDown={() => setIsResizing(true)}
-                />
+        <div className="chat-panel" style={{ width: `${panelWidth}px` }}>
+            {/* Resize handle */}
+            <div style={{
+                position: 'absolute', left: 0, top: 0, bottom: 0, width: '4px',
+                cursor: 'ew-resize', zIndex: 10,
+                background: isResizing ? 'var(--primary)' : 'transparent', transition: 'background 0.2s'
+            }} onMouseDown={() => setIsResizing(true)} />
 
-                {/* Header with title and close button */}
-                <div style={{
-                    padding: '1rem',
-                    background: 'linear-gradient(135deg, var(--primary), var(--accent))',
-                    color: 'white',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <Sparkles size={18} />
-                        <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>AI Assistant</h3>
+            {/* Header */}
+            <div className="chat-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    <div style={{
+                        width: '34px', height: '34px', borderRadius: '50%',
+                        background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(4px)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                        <Sparkles size={16} />
                     </div>
-                    <button onClick={onClose} style={{ color: 'white', opacity: 1, background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px' }}>
-                        <X size={20} />
-                    </button>
-                </div>
-
-                {/* Message list — scrollable area showing conversation history */}
-                <div style={{
-                    flex: 1,
-                    overflowY: 'auto',
-                    padding: '1rem',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '1rem',
-                }}>
-                    {messages.map((msg, i) => (
-                        <div key={i} style={{
-                            alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                            display: 'flex',
-                            gap: '0.5rem',
-                            maxWidth: '85%',
-                            flexDirection: msg.role === 'user' ? 'row-reverse' : 'row'
-                        }}>
-                            {/* Avatar icon — user or bot */}
-                            <div style={{
-                                width: '24px', height: '24px', borderRadius: '50%',
-                                background: msg.role === 'user' ? 'var(--primary)' : '#e5e7eb',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                flexShrink: 0
-                            }}>
-                                {msg.role === 'user' ? <User size={14} color="white" /> : <Bot size={14} color="#374151" />}
-                            </div>
-                            {/* Message bubble + optional suggestion cards */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', minWidth: 0 }}>
-                                <div style={{
-                                    background: msg.role === 'user' ? 'var(--primary)' : '#f3f4f6',
-                                    color: msg.role === 'user' ? 'white' : '#1f2937',
-                                    padding: '0.75rem 1rem',
-                                    borderRadius: '1rem',
-                                    borderTopRightRadius: msg.role === 'user' ? '4px' : '1rem',
-                                    borderTopLeftRadius: msg.role === 'ai' ? '4px' : '1rem',
-                                    boxShadow: 'var(--shadow-sm)',
-                                    fontSize: '0.95rem',
-                                    lineHeight: 1.5,
-                                    border: msg.role === 'ai' ? '1px solid #e5e7eb' : 'none'
-                                }}>
-                                    {msg.text}
-                                </div>
-                                {/* Suggestion product cards — horizontal scroll row */}
-                                {msg.suggestions && msg.suggestions.length > 0 && (
-                                    <div style={{
-                                        display: 'flex',
-                                        gap: '0.5rem',
-                                        overflowX: 'auto',
-                                        paddingBottom: '0.25rem',
-                                        scrollbarWidth: 'thin'
-                                    }}>
-                                        {msg.suggestions.map(product => (
-                                            <SuggestionCard key={product.id} product={product} />
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
+                    <div>
+                        <div style={{ fontWeight: 700, fontSize: '0.95rem', lineHeight: 1.2 }}>AI Assistant</div>
+                        <div style={{ fontSize: '0.72rem', opacity: 0.8, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#4ade80', display: 'inline-block' }} />
+                            Online
                         </div>
-                    ))}
-                    {/* Typing indicator shown while AI is generating a response */}
-                    {isTyping && (
-                        <div style={{ alignSelf: 'flex-start', color: '#9ca3af', fontSize: '0.8rem', paddingLeft: '2.5rem' }}>
-                            typing...
+                    </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    {cart.length > 0 && (
+                        <div style={{
+                            background: 'rgba(255,255,255,0.2)', borderRadius: 'var(--radius-full)',
+                            padding: '0.25rem 0.6rem', fontSize: '0.75rem', fontWeight: 600,
+                            display: 'flex', alignItems: 'center', gap: '4px'
+                        }}>
+                            <ShoppingCart size={12} /> {cart.reduce((s, i) => s + i.quantity, 0)}
                         </div>
                     )}
-                    {/* Scroll anchor — auto-scrolls to here on new messages */}
-                    <div ref={messagesEndRef} />
+                    <button onClick={onClose} className="icon-btn">
+                        <X size={18} />
+                    </button>
                 </div>
+            </div>
 
-                {/* Input form — text field and send button */}
-                <form onSubmit={handleSubmit} style={{
-                    padding: '1rem',
-                    borderTop: '1px solid var(--border)',
-                    background: 'var(--surface)',
-                    display: 'flex',
-                    gap: '0.5rem'
-                }}>
+            {/* Messages */}
+            <div className="chat-messages">
+                {messages.map((msg, i) => (
+                    <div key={i} style={{
+                        display: 'flex', flexDirection: 'column',
+                        alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                        gap: '0.5rem'
+                    }}>
+                        <ChatBubble role={msg.role}>{msg.text}</ChatBubble>
+
+                        {msg.comparison && msg.comparison.rows.length > 0 && (
+                            <div style={{ width: '100%', maxWidth: `${panelWidth - 40}px` }}>
+                                <ComparisonTable comparison={msg.comparison} />
+                            </div>
+                        )}
+
+                        {msg.suggestions && msg.suggestions.length > 0 && (
+                            <div style={{ width: '100%', maxWidth: `${panelWidth - 40}px` }}>
+                                <div style={{
+                                    display: 'flex', gap: '0.6rem', overflowX: 'auto',
+                                    paddingBottom: '0.5rem', paddingTop: '0.25rem',
+                                    scrollbarWidth: 'thin', scrollbarColor: '#d1d5db transparent'
+                                }}>
+                                    {msg.suggestions.map((product, idx) => (
+                                        <SuggestionCard key={product.id} product={product} highlight={idx === 0} />
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                ))}
+
+                {isTyping && <TypingIndicator />}
+
+                {showQuickActions && messages.length === 1 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' }}>
+                        {QUICK_ACTIONS.map(a => (
+                            <Chip key={a.label} label={a.label} onClick={() => sendMessage(a.msg)} />
+                        ))}
+                    </div>
+                )}
+
+                <div ref={messagesEndRef} />
+            </div>
+
+            {/* Input bar */}
+            <div className="chat-input-bar">
+                {cart.length > 0 && (
+                    <div style={{
+                        display: 'flex', alignItems: 'center', gap: '0.4rem',
+                        fontSize: '0.75rem', color: 'var(--primary)', marginBottom: '0.6rem',
+                        padding: '0.35rem 0.75rem', background: '#edf6f6',
+                        borderRadius: '8px', border: '1px solid #b2d4d6'
+                    }}>
+                        <Tag size={11} />
+                        <span>{cart.length} item{cart.length > 1 ? 's' : ''} in cart — ask me to apply a coupon!</span>
+                    </div>
+                )}
+                <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                     <input
                         type="text"
                         value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        placeholder="Type a command..."
+                        onChange={e => setInput(e.target.value)}
+                        placeholder="Ask about products, deals, your cart…"
                         style={{
-                            flex: 1,
-                            padding: '0.75rem',
-                            borderRadius: '20px',
-                            border: '1px solid var(--border)',
-                            background: 'var(--background)',
-                            outline: 'none',
-                            color: 'var(--foreground)',
-                            paddingLeft: '1rem'
+                            flex: 1, padding: '0.7rem 1rem', borderRadius: '24px',
+                            border: '1.5px solid #e5e7eb', background: '#f9fafb',
+                            outline: 'none', color: '#1f2937', fontSize: '0.9rem',
+                            transition: 'border-color 0.15s'
                         }}
+                        onFocus={e => (e.target.style.borderColor = '#3D7A7F')}
+                        onBlur={e => (e.target.style.borderColor = '#e5e7eb')}
                     />
-                    <button type="submit" className="btn btn-primary" style={{ padding: '0.75rem', borderRadius: '50%', width: '42px', height: '42px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Send size={18} />
+                    <button type="submit" disabled={!input.trim() || isTyping} style={{
+                        width: '42px', height: '42px', borderRadius: '50%', border: 'none',
+                        background: input.trim() && !isTyping ? 'linear-gradient(135deg, var(--primary), var(--primary-hover))' : '#e5e7eb',
+                        color: input.trim() && !isTyping ? 'white' : '#9ca3af',
+                        cursor: input.trim() && !isTyping ? 'pointer' : 'default',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        flexShrink: 0, transition: 'all 0.2s',
+                        boxShadow: input.trim() && !isTyping ? '0 2px 8px rgba(61,122,127,0.35)' : 'none'
+                    }}>
+                        <Send size={17} />
                     </button>
                 </form>
             </div>
-        );
+        </div>
+    );
 }

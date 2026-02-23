@@ -7,30 +7,39 @@ const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
-async function fetchBackendData(): Promise<{
+// ── Simple server-side cache (60 s TTL) ──────────────────────────────────────
+let cache: {
     products: Product[];
     promotions: Promotion[];
     bundles: Bundle[];
     couponProductMappings: Record<string, string[]>;
-}> {
-    try {
-        const [productsRes, promotionsRes, bundlesRes, couponMappingsRes] = await Promise.all([
-            fetch(`${API_URL}/api/products`),
-            fetch(`${API_URL}/api/promotions`),
-            fetch(`${API_URL}/api/bundles/active`),
-            fetch(`${API_URL}/api/promotions/coupon-product-mappings`),
-        ]);
+    expiresAt: number;
+} | null = null;
 
-        const products: Product[] = productsRes.ok ? await productsRes.json() : [];
-        const promotions: Promotion[] = promotionsRes.ok ? await promotionsRes.json() : [];
-        const bundles: Bundle[] = bundlesRes.ok ? await bundlesRes.json() : [];
-        const couponProductMappings: Record<string, string[]> = couponMappingsRes.ok ? await couponMappingsRes.json() : {};
+async function fetchBackendData() {
+    if (cache && Date.now() < cache.expiresAt) return cache;
 
-        return { products, promotions, bundles, couponProductMappings };
-    } catch (error) {
-        console.error('Failed to fetch backend data:', error);
-        return { products: [], promotions: [], bundles: [], couponProductMappings: {} };
-    }
+    const [productsRes, promotionsRes, bundlesRes, couponMappingsRes] = await Promise.all([
+        fetch(`${API_URL}/api/products`),
+        fetch(`${API_URL}/api/promotions`),
+        fetch(`${API_URL}/api/bundles/active`),
+        fetch(`${API_URL}/api/promotions/coupon-product-mappings`),
+    ]);
+
+    cache = {
+        products: productsRes.ok ? await productsRes.json() : [],
+        promotions: promotionsRes.ok ? await promotionsRes.json() : [],
+        bundles: bundlesRes.ok ? await bundlesRes.json() : [],
+        couponProductMappings: couponMappingsRes.ok ? await couponMappingsRes.json() : {},
+        expiresAt: Date.now() + 60_000,
+    };
+    return cache;
+}
+
+/** Resolve a short ID (p0, p1…) or passthrough real UUID using the idMap */
+function resolveId(val: unknown, idMap: Record<string, string>): string {
+    const s = String(val);
+    return idMap[s] ?? s;
 }
 
 export async function POST(req: Request) {
@@ -38,54 +47,75 @@ export async function POST(req: Request) {
         const { message, history, cartItems } = await req.json();
 
         if (!process.env.GEMINI_API_KEY) {
-            return NextResponse.json({ action: 'none', message: 'API Key not configured' }, { status: 200 });
+            return NextResponse.json({ action: 'none', message: 'API Key not configured' });
         }
 
         const { products, promotions, bundles, couponProductMappings } = await fetchBackendData();
-        const systemPrompt = createShoppingAssistantPrompt(products, promotions, bundles, couponProductMappings, cartItems ?? []);
+        const { prompt: systemPrompt, idMap } = createShoppingAssistantPrompt(
+            products, promotions, bundles, couponProductMappings, cartItems ?? []
+        );
 
         const model = genAI.getGenerativeModel({
             model: MODEL,
-            generationConfig: { responseMimeType: "application/json" }
+            generationConfig: { responseMimeType: 'application/json' }
         });
+
+        // Keep last 6 turns (3 exchanges) — enough context, far fewer tokens
+        const trimmedHistory = (history as { role: string; text: string }[])
+            .filter(m => m.text?.trim())
+            .slice(-6)
+            .map(m => ({
+                role: m.role === 'ai' || m.role === 'model' ? 'model' : 'user',
+                // Strip JSON boilerplate from AI turns — only keep the message field
+                parts: [{ text: m.role === 'ai' ? extractMessage(m.text) : m.text }]
+            }));
 
         const chat = model.startChat({
             history: [
                 { role: 'user', parts: [{ text: systemPrompt }] },
-                { role: 'model', parts: [{ text: '{"action": "none", "payload": null, "message": "Ready"}' }] },
-                ...history
-                    .filter((msg: any) => msg.text && msg.text.trim())
-                    .map((msg: any) => ({
-                        role: msg.role === 'ai' || msg.role === 'model' ? 'model' : 'user',
-                        parts: [{ text: msg.text }]
-                    }))
+                { role: 'model', parts: [{ text: '{"action":"none","message":"Ready"}' }] },
+                ...trimmedHistory
             ]
         });
 
         const result = await chat.sendMessage(message);
-        const jsonResponse = JSON.parse(result.response.text());
-        
-        // Execute API call if requested
-        if (jsonResponse.action === 'api_call' && jsonResponse.payload) {
-            try {
-                const apiRes = await fetch(`${API_URL}${jsonResponse.payload.endpoint}`, {
-                    method: jsonResponse.payload.method || 'GET',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: jsonResponse.payload.body ? JSON.stringify(jsonResponse.payload.body) : undefined
-                });
-                jsonResponse.apiResult = await apiRes.json();
-            } catch (err) {
-                jsonResponse.message += ' (API call failed)';
+        const raw = result.response.text();
+        const jsonResponse = JSON.parse(raw);
+
+        // Resolve short IDs → real UUIDs in payload and suggestions
+        if (jsonResponse.payload) {
+            if (typeof jsonResponse.payload === 'string') {
+                jsonResponse.payload = resolveId(jsonResponse.payload, idMap);
+            } else if (Array.isArray(jsonResponse.payload)) {
+                jsonResponse.payload = jsonResponse.payload.map((v: unknown) => resolveId(v, idMap));
+            } else if (typeof jsonResponse.payload === 'object') {
+                if (jsonResponse.payload.productId) {
+                    jsonResponse.payload.productId = resolveId(jsonResponse.payload.productId, idMap);
+                }
             }
         }
-        
+        if (Array.isArray(jsonResponse.suggestions)) {
+            jsonResponse.suggestions = jsonResponse.suggestions.map((v: unknown) => resolveId(v, idMap));
+        }
+
         return NextResponse.json(jsonResponse);
 
-    } catch (error: any) {
-        console.error('Chat API error:', error);
-        if (error.message?.includes('429') || error.message?.includes('quota')) {
-            return NextResponse.json({ action: 'none', message: 'Rate limit exceeded. Please wait.' }, { status: 200 });
+    } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : '';
+        console.error('Chat API error:', msg);
+        if (msg.includes('429') || msg.includes('quota')) {
+            return NextResponse.json({ action: 'none', message: 'Rate limit reached. Please wait a moment.' });
         }
-        return NextResponse.json({ action: 'none', message: 'Sorry, I encountered an issue.' }, { status: 200 });
+        return NextResponse.json({ action: 'none', message: 'Sorry, something went wrong.' });
+    }
+}
+
+/** Pull just the human-readable message out of a JSON AI response string */
+function extractMessage(text: string): string {
+    try {
+        const parsed = JSON.parse(text);
+        return parsed.message ?? text;
+    } catch {
+        return text;
     }
 }

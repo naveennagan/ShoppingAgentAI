@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import Link from 'next/link';
 import { useCart } from '@/context/CartContext';
 import { Sparkles } from 'lucide-react';
@@ -26,6 +27,24 @@ interface NavbarProps {
     chatWidth?: number;
 }
 
+function NavLink({ href, children, icon }: { href: string; children: React.ReactNode; icon?: React.ReactNode }) {
+    return (
+        <Link href={href} style={{
+            display: 'flex', alignItems: 'center', gap: '0.4rem',
+            fontWeight: 500, fontSize: '0.9rem', color: '#404040',
+            padding: '0.45rem 0.9rem', borderRadius: '999px',
+            border: '1.5px solid transparent',
+            transition: 'all 0.2s',
+        }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = '#E5E5E5'; e.currentTarget.style.background = '#f5f5f5'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.background = 'transparent'; }}
+        >
+            {icon}
+            {children}
+        </Link>
+    );
+}
+
 export default function Navbar({ onToggleChat, isChatOpen, chatWidth }: NavbarProps) {
     const { count } = useCart();
 
@@ -46,49 +65,91 @@ export default function Navbar({ onToggleChat, isChatOpen, chatWidth }: NavbarPr
                 justifyContent: 'space-between'
             }}>
                 <Link href="/" style={{
-                    fontSize: '1.5rem',
-                    fontWeight: '700',
-                    color: '#000'
+                    fontSize: '1.25rem',
+                    fontWeight: '800',
+                    color: '#000',
+                    letterSpacing: '-0.02em',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem'
                 }}>
-                    AI.Shop
+                    <span style={{
+                        background: '#3D7A7F',
+                        color: 'white',
+                        borderRadius: '8px',
+                        padding: '2px 8px',
+                        fontSize: '1rem',
+                        fontWeight: 800,
+                    }}>AI</span>
+                    <span>.Shop</span>
                 </Link>
 
-                <div style={{ display: 'flex', gap: '2.5rem', alignItems: 'center', fontSize: '0.95rem' }}>
-                    <Link href="/products" style={{ fontWeight: 400 }}>Products</Link>
-                    <Link href="/orders" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 400 }}>
-                        <OrdersIcon />
-                        My Orders
-                    </Link>
-                    <button 
+                <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
+                    <NavLink href="/products">Products</NavLink>
+                    <NavLink href="/orders" icon={<OrdersIcon />}>My Orders</NavLink>
+                    <button
                         onClick={onToggleChat}
-                        style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            gap: '0.5rem',
-                            background: 'transparent',
-                            border: 'none',
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.4rem',
+                            background: isChatOpen ? '#3D7A7F' : 'transparent',
+                            border: isChatOpen ? 'none' : '1.5px solid #E5E5E5',
                             cursor: 'pointer',
-                            fontWeight: 400,
-                            color: 'inherit'
+                            fontWeight: 500,
+                            color: isChatOpen ? 'white' : '#404040',
+                            fontSize: '0.9rem',
+                            padding: '0.45rem 0.9rem',
+                            borderRadius: '999px',
+                            transition: 'all 0.2s',
+                        }}
+                        onMouseEnter={e => {
+                            if (!isChatOpen) {
+                                e.currentTarget.style.background = '#f5f5f5';
+                                e.currentTarget.style.borderColor = '#3D7A7F';
+                                e.currentTarget.style.color = '#3D7A7F';
+                            }
+                        }}
+                        onMouseLeave={e => {
+                            if (!isChatOpen) {
+                                e.currentTarget.style.background = 'transparent';
+                                e.currentTarget.style.borderColor = '#E5E5E5';
+                                e.currentTarget.style.color = '#404040';
+                            }
                         }}
                     >
-                        <Sparkles size={18} />
+                        <Sparkles size={15} />
                         AI Assistant
                     </button>
-                    <Link href="/cart" style={{ position: 'relative' }}>
+                    <Link href="/cart" style={{
+                        position: 'relative',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '40px',
+                        height: '40px',
+                        borderRadius: '999px',
+                        border: '1.5px solid #E5E5E5',
+                        color: '#404040',
+                        transition: 'all 0.2s',
+                        marginLeft: '0.25rem',
+                    }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#3D7A7F'; e.currentTarget.style.color = '#3D7A7F'; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#E5E5E5'; e.currentTarget.style.color = '#404040'; }}
+                    >
                         <ShoppingBagIcon />
                         {count > 0 && (
                             <span style={{
                                 position: 'absolute',
-                                top: '-8px',
-                                right: '-8px',
+                                top: '-4px',
+                                right: '-4px',
                                 background: '#3D7A7F',
                                 color: 'white',
-                                fontSize: '0.7rem',
+                                fontSize: '0.65rem',
                                 fontWeight: 'bold',
                                 borderRadius: '50%',
-                                width: '18px',
-                                height: '18px',
+                                width: '17px',
+                                height: '17px',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center'

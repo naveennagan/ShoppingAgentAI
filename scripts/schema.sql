@@ -69,7 +69,34 @@ CREATE TABLE product_promotions (
 CREATE INDEX idx_product_promotions_product ON product_promotions(product_id);
 CREATE INDEX idx_product_promotions_promotion ON product_promotions(promotion_id);
 
--- Bundles table
+-- Orders table
+CREATE TABLE orders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id TEXT NOT NULL,
+    total_amount NUMERIC(10, 2) NOT NULL,
+    status TEXT NOT NULL DEFAULT 'CONFIRMED',
+    shipping_address TEXT,
+    payment_method TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_orders_session ON orders(session_id);
+CREATE INDEX idx_orders_created_at ON orders(created_at);
+
+-- Order items table
+CREATE TABLE order_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    product_id TEXT NOT NULL,
+    product_name TEXT NOT NULL,
+    price NUMERIC(10, 2) NOT NULL,
+    quantity INTEGER NOT NULL,
+    image_url TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_order_items_order ON order_items(order_id);
+
 CREATE TABLE bundles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,

@@ -1,168 +1,158 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import './orders.css';
+import Link from 'next/link';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 interface OrderItem {
-  productId: string;
-  productName: string;
-  price: number;
-  quantity: number;
-  imageUrl: string;
+    productId: string;
+    productName: string;
+    price: number;
+    quantity: number;
+    imageUrl: string;
 }
 
 interface Order {
-  orderId: string;
-  sessionId: string;
-  items: OrderItem[];
-  totalAmount: number;
-  status: string;
-  orderDate: string;
-  shippingAddress: string;
-  paymentMethod: string;
+    orderId: string;
+    sessionId: string;
+    items: OrderItem[];
+    totalAmount: number;
+    status: string;
+    orderDate: string;
+    shippingAddress: string;
+    paymentMethod: string;
+}
+
+const STATUS_STEPS = ['CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED'];
+
+function StatusTimeline({ status }: { status: string }) {
+    const current = STATUS_STEPS.indexOf(status.toUpperCase());
+    return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 0, margin: '1rem 0' }}>
+            {STATUS_STEPS.map((step, i) => {
+                const done = i <= current;
+                return (
+                    <div key={step} style={{ display: 'flex', alignItems: 'center', flex: i < STATUS_STEPS.length - 1 ? 1 : 'none' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}>
+                            <div style={{
+                                width: '28px', height: '28px', borderRadius: '50%',
+                                background: done ? 'var(--primary)' : '#e5e7eb',
+                                color: done ? 'white' : '#9ca3af',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: '0.75rem', fontWeight: 700, flexShrink: 0
+                            }}>
+                                {done ? '✓' : i + 1}
+                            </div>
+                            <span style={{ fontSize: '0.65rem', color: done ? 'var(--primary)' : '#9ca3af', fontWeight: done ? 600 : 400, whiteSpace: 'nowrap' }}>
+                                {step.charAt(0) + step.slice(1).toLowerCase()}
+                            </span>
+                        </div>
+                        {i < STATUS_STEPS.length - 1 && (
+                            <div style={{ flex: 1, height: '2px', background: i < current ? 'var(--primary)' : '#e5e7eb', margin: '0 4px', marginBottom: '18px' }} />
+                        )}
+                    </div>
+                );
+            })}
+        </div>
+    );
 }
 
 export default function OrdersPage() {
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [sessionId, setSessionId] = useState<string>('');
+    const [orders, setOrders] = useState<Order[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    // Get session ID from localStorage or generate one
-    let currentSessionId = localStorage.getItem('sessionId');
-    if (!currentSessionId) {
-      currentSessionId = 'user123';
-      localStorage.setItem('sessionId', currentSessionId);
-    }
-    console.log('Using session ID:', currentSessionId);
-    setSessionId(currentSessionId);
-    fetchOrders(currentSessionId);
-  }, []);
+    useEffect(() => {
+        let sessionId = localStorage.getItem('sessionId');
+        if (!sessionId) {
+            sessionId = 'user123';
+            localStorage.setItem('sessionId', sessionId);
+        }
+        fetch(`${API_URL}/api/orders?sessionId=${sessionId}`)
+            .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+            .then(setOrders)
+            .catch(e => setError(e.message))
+            .finally(() => setLoading(false));
+    }, []);
 
-  const fetchOrders = async (sessionId: string) => {
-    try {
-      console.log('Fetching orders for session:', sessionId);
-      const response = await fetch(`http://localhost:8080/api/orders?sessionId=${sessionId}`);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      const ordersData = await response.json();
-      console.log('Orders data:', ordersData);
-      setOrders(ordersData);
-    } catch (err) {
-      console.error('Fetch error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load orders');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'confirmed': return '#28a745';
-      case 'processing': return '#ffc107';
-      case 'shipped': return '#17a2b8';
-      case 'delivered': return '#28a745';
-      default: return '#6c757d';
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="orders-container">
-        <div className="loading">Loading your orders...</div>
-      </div>
+    if (loading) return (
+        <main className="container" style={{ padding: '4rem 0', textAlign: 'center' }}>
+            <p style={{ color: '#6b7280' }}>Loading your orders…</p>
+        </main>
     );
-  }
 
-  if (error) {
-    return (
-      <div className="orders-container">
-        <div className="error">Error: {error}</div>
-      </div>
+    if (error) return (
+        <main className="container" style={{ padding: '4rem 0', textAlign: 'center' }}>
+            <p style={{ color: '#ef4444' }}>Failed to load orders: {error}</p>
+        </main>
     );
-  }
 
-  return (
-    <div className="orders-container">
-      <div className="orders-header">
-        <h1>My Orders</h1>
-        <p>Track and manage your purchases</p>
-      </div>
+    return (
+        <main className="container" style={{ padding: '2rem 0' }}>
+            <h1 style={{ fontSize: '2rem', fontWeight: 800, marginBottom: '0.5rem' }}>My Orders</h1>
+            <p style={{ color: '#6b7280', marginBottom: '2rem' }}>Orders are automatically removed after 3 days.</p>
 
-      {orders.length === 0 ? (
-        <div className="empty-orders">
-          <h3>No orders yet</h3>
-          <p>When you place orders, they'll appear here.</p>
-          <a href="/products" className="shop-now-btn">
-            Start Shopping
-          </a>
-        </div>
-      ) : (
-        <div className="orders-list">
-          {orders.map((order) => (
-            <div key={order.orderId} className="order-card">
-              <div className="order-header">
-                <div className="order-info">
-                  <h3>Order #{order.orderId}</h3>
-                  <p className="order-date">{formatDate(order.orderDate)}</p>
+            {orders.length === 0 ? (
+                <div className="card" style={{ textAlign: 'center', padding: '3rem' }}>
+                    <p style={{ fontSize: '1.1rem', color: '#6b7280', marginBottom: '1.5rem' }}>No orders yet.</p>
+                    <Link href="/products" className="btn btn-primary">Start Shopping</Link>
                 </div>
-                <div className="order-status">
-                  <span 
-                    className="status-badge"
-                    style={{ backgroundColor: getStatusColor(order.status) }}
-                  >
-                    {order.status}
-                  </span>
-                </div>
-              </div>
+            ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    {orders.map(order => (
+                        <div key={order.orderId} className="card">
+                            {/* Order header */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                                <div>
+                                    <span style={{ fontWeight: 700, fontSize: '1rem' }}>Order #{order.orderId}</span>
+                                    <p style={{ color: '#6b7280', fontSize: '0.85rem', margin: '0.2rem 0 0' }}>
+                                        {new Date(order.orderDate).toLocaleDateString('en-GB', {
+                                            day: 'numeric', month: 'long', year: 'numeric',
+                                            hour: '2-digit', minute: '2-digit'
+                                        })}
+                                    </p>
+                                </div>
+                                <span style={{
+                                    padding: '0.3rem 0.75rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 600,
+                                    background: order.status === 'DELIVERED' ? '#dcfce7' : '#eff6ff',
+                                    color: order.status === 'DELIVERED' ? '#15803d' : '#1d4ed8'
+                                }}>
+                                    {order.status}
+                                </span>
+                            </div>
 
-              <div className="order-items">
-                {order.items.map((item, index) => (
-                  <div key={index} className="order-item">
-                    <img 
-                      src={item.imageUrl} 
-                      alt={item.productName}
-                      className="item-image"
-                    />
-                    <div className="item-details">
-                      <h4>{item.productName}</h4>
-                      <p>Quantity: {item.quantity}</p>
-                      <p className="item-price">${item.price.toFixed(2)} each</p>
-                    </div>
-                    <div className="item-total">
-                      ${(item.price * item.quantity).toFixed(2)}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                            {/* Status timeline */}
+                            <StatusTimeline status={order.status} />
 
-              <div className="order-footer">
-                <div className="order-details">
-                  <p><strong>Shipping Address:</strong> {order.shippingAddress}</p>
-                  <p><strong>Payment Method:</strong> {order.paymentMethod}</p>
+                            {/* Items */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', margin: '1rem 0' }}>
+                                {order.items.map((item, i) => (
+                                    <div key={i} style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                        <img src={item.imageUrl} alt={item.productName}
+                                            style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '8px', background: '#f3f4f6', flexShrink: 0 }} />
+                                        <div style={{ flex: 1 }}>
+                                            <p style={{ fontWeight: 600, margin: 0 }}>{item.productName}</p>
+                                            <p style={{ color: '#6b7280', fontSize: '0.85rem', margin: '0.1rem 0 0' }}>Qty: {item.quantity}</p>
+                                        </div>
+                                        <span style={{ fontWeight: 700 }}>£{(item.price * item.quantity).toFixed(2)}</span>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Footer */}
+                            <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>
+                                    <p style={{ margin: 0 }}>{order.shippingAddress}</p>
+                                    <p style={{ margin: '0.2rem 0 0' }}>{order.paymentMethod}</p>
+                                </div>
+                                <span style={{ fontWeight: 800, fontSize: '1.1rem' }}>Total: £{order.totalAmount.toFixed(2)}</span>
+                            </div>
+                        </div>
+                    ))}
                 </div>
-                <div className="order-total">
-                  <h3>Total: ${order.totalAmount.toFixed(2)}</h3>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+            )}
+        </main>
+    );
 }
