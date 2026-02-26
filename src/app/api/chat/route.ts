@@ -80,7 +80,9 @@ export async function POST(req: Request) {
 
         const result = await chat.sendMessage(message);
         const raw = result.response.text();
-        const jsonResponse = JSON.parse(raw);
+        // Strip markdown code fences if present
+        const cleaned = raw.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+        const jsonResponse = JSON.parse(cleaned);
 
         // Helper to resolve IDs in a payload
         function resolvePayload(payload: any) {
@@ -112,7 +114,7 @@ export async function POST(req: Request) {
 
     } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : '';
-        console.error('Chat API error:', msg);
+        console.error('Chat API error:', msg, error);
         if (msg.includes('429') || msg.includes('quota')) {
             return NextResponse.json({ action: 'none', message: 'Rate limit reached. Please wait a moment.' });
         }
