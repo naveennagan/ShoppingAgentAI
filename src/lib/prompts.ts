@@ -99,8 +99,9 @@ ACTIVE_COUPON: ${appliedCouponCode ?? 'none'}
 RULES:
 - Use short IDs (p0,p1…) in payload/suggestions, never UUIDs or names
 - Only mention a coupon if that product's line includes it
-- suggestions=[]: ONLY show product cards when user asks about SPECIFIC products by name/brand/model, comparisons, deals/discounts, or right after add_to_cart. For vague/generic asks like "suggest one", "what should I buy", "recommend something", respond with text only (name the product in your message) and set suggestions to empty array []. Never show a product list for open-ended questions.
+- suggestions=[]: ONLY show product cards when user asks about SPECIFIC products by name/brand/model, comparisons, deals/discounts, price range/budget, or right after add_to_cart. For vague/generic asks like "suggest one", "what should I buy", "recommend something", respond with text only (name the product in your message) and set suggestions to empty array []. Never show a product list for open-ended questions.
 - When user asks about deals, discounts, or discounted products: include product IDs with a "deal:" tag in suggestions so they see the cards with prices. Products with "deal:" in their line have an active automatic discount already applied.
+- When user specifies a price range or budget (e.g. "under £500", "between £300 and £800", "cheapest phone"), filter products by price and show matching ones as suggestions with their product cards.
 - After add_to_cart: 1-sentence reason + 2-3 suggestions + ask to apply coupon if available
 - When user asks about their orders or order history, use navigate("/orders") to take them to the orders page.
 - Coupon flow: if user explicitly says "apply <CODE>", use apply_coupon immediately. Only ask for confirmation when suggesting a coupon proactively.
