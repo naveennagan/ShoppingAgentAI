@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import { useCart } from '@/context/CartContext';
 import Link from 'next/link';
-import { apiClient } from '@/lib/api-client';
 import { calculateDiscountedPrice } from '@/lib/discountCalculator';
+import PriceDisplay from '@/components/ui/PriceDisplay';
 
 export default function CartPage() {
     const { items, removeFromCart, updateQuantity, total, clearCart, appliedCoupon, applyCoupon, removeCoupon } = useCart();
@@ -13,13 +13,17 @@ export default function CartPage() {
     const [couponError, setCouponError] = useState('');
     const [isValidating, setIsValidating] = useState(false);
 
-    const subtotal = items.reduce((sum, { product, quantity }) => sum + product.price * quantity, 0);
+    const subtotal = items.reduce((sum, { product, quantity, promotion }) => {
+        const effectivePrice = promotion ? promotion.discountedPrice : product.price;
+        return sum + effectivePrice * quantity;
+    }, 0);
 
     const discountAmount = appliedCoupon
-        ? items.reduce((sum, { product, quantity }) => {
+        ? items.reduce((sum, { product, quantity, promotion }) => {
             if (!appliedCoupon.applicableProductIds.includes(product.id)) return sum;
-            const discounted = calculateDiscountedPrice(product.price, appliedCoupon.discountType, appliedCoupon.discountValue);
-            return sum + (product.price - discounted) * quantity;
+            const effectivePrice = promotion ? promotion.discountedPrice : product.price;
+            const afterCoupon = calculateDiscountedPrice(effectivePrice, appliedCoupon.discountType, appliedCoupon.discountValue);
+            return sum + (effectivePrice - afterCoupon) * quantity;
         }, 0)
         : 0;
 
@@ -68,7 +72,7 @@ export default function CartPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '2rem', alignItems: 'start' }}>
                 {/* Cart Items */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    {items.map(({ product, quantity }) => (
+                    {items.map(({ product, quantity, promotion }) => (
                         <div key={product.id} className="card" style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                             <div style={{ width: '100px', height: '100px', background: 'var(--surface-hover)', borderRadius: '8px', overflow: 'hidden', flexShrink: 0 }}>
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -85,9 +89,11 @@ export default function CartPage() {
                             </div>
 
                             <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
-                                <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>
-                                    £{(product.price * quantity).toFixed(2)}
-                                </div>
+                                <PriceDisplay
+                                    originalPrice={product.price * quantity}
+                                    discountedPrice={promotion ? promotion.discountedPrice * quantity : null}
+                                    promotionalLabel={promotion?.promotionalLabel}
+                                />
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--surface-hover)', borderRadius: '8px', padding: '0.25rem' }}>
                                     <button
                                         onClick={() => updateQuantity(product.id, quantity - 1)}

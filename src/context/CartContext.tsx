@@ -1,8 +1,9 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Product, CouponValidationResult } from '@/lib/products';
+import { Product, Promotion, CouponValidationResult } from '@/lib/products';
 import { apiClient } from '@/lib/api-client';
+import { calculateDiscountedPrice } from '@/lib/discountCalculator';
 
 const SESSION_ID = typeof window !== 'undefined' ? (localStorage.getItem('sessionId') || (() => {
     const id = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
@@ -37,9 +38,16 @@ async function generateAISuggestion(product: Product, currentCart: CartItem[]): 
     }
 }
 
+export interface CartItemPromotion {
+    discountedPrice: number;
+    promotionalLabel: string | null;
+    originalPrice: number;
+}
+
 export interface CartItem {
     product: Product;
     quantity: number;
+    promotion?: CartItemPromotion;
 }
 
 interface CartContextType {
@@ -49,6 +57,8 @@ interface CartContextType {
     updateQuantity: (productId: string, quantity: number) => void;
     clearCart: () => void;
     total: number;
+    finalTotal: number;
+    couponDiscount: number;
     count: number;
     appliedCoupon: CouponValidationResult | null;
     applyCoupon: (code: string) => Promise<void>;
@@ -61,6 +71,44 @@ export function CartProvider({ children }: { children: ReactNode }) {
     const [items, setItems] = useState<CartItem[]>([]);
     const [isInitialized, setIsInitialized] = useState(false);
     const [appliedCoupon, setAppliedCoupon] = useState<CouponValidationResult | null>(null);
+    const [itemPromotions, setItemPromotions] = useState<Record<string, CartItemPromotion>>({});
+
+    // Fetch promotions for all cart items whenever items change
+    useEffect(() => {
+        if (!isInitialized) return;
+        const productIds = items.map(i => i.product.id);
+        if (productIds.length === 0) {
+            setItemPromotions({});
+            return;
+        }
+
+        let cancelled = false;
+        const fetchPromotions = async () => {
+            const promoMap: Record<string, CartItemPromotion> = {};
+            await Promise.all(
+                items.map(async (item) => {
+                    try {
+                        const promotions: Promotion[] = await apiClient.getPromotionsForProduct(item.product.id);
+                        const activePromo = promotions.find(p => p.active && !p.promoCode);
+                        if (activePromo) {
+                            promoMap[item.product.id] = {
+                                discountedPrice: calculateDiscountedPrice(item.product.price, activePromo.discountType, activePromo.discountValue),
+                                promotionalLabel: activePromo.promotionalLabel,
+                                originalPrice: item.product.price,
+                            };
+                        }
+                    } catch {
+                        // If fetching promotions fails for an item, skip it
+                    }
+                })
+            );
+            if (!cancelled) {
+                setItemPromotions(promoMap);
+            }
+        };
+        fetchPromotions();
+        return () => { cancelled = true; };
+    }, [items, isInitialized]);
 
     // Load cart from backend on mount
     useEffect(() => {
@@ -135,8 +183,28 @@ export function CartProvider({ children }: { children: ReactNode }) {
         }
     };
 
-    const total = items.reduce((sum: number, item: CartItem) => sum + (item.product.price * item.quantity), 0);
+    const enrichedItems: CartItem[] = items.map(item => ({
+        ...item,
+        promotion: itemPromotions[item.product.id],
+    }));
+
+    const total = enrichedItems.reduce((sum: number, item: CartItem) => {
+        const price = item.promotion ? item.promotion.discountedPrice : item.product.price;
+        return sum + (price * item.quantity);
+    }, 0);
     const count = items.reduce((sum: number, item: CartItem) => sum + item.quantity, 0);
+
+    // Coupon discount applies on top of already-discounted prices (after automatic promotions)
+    const couponDiscount = appliedCoupon
+        ? enrichedItems.reduce((sum, item) => {
+            if (!appliedCoupon.applicableProductIds.includes(item.product.id)) return sum;
+            const effectivePrice = item.promotion ? item.promotion.discountedPrice : item.product.price;
+            const afterCoupon = calculateDiscountedPrice(effectivePrice, appliedCoupon.discountType, appliedCoupon.discountValue);
+            return sum + (effectivePrice - afterCoupon) * item.quantity;
+        }, 0)
+        : 0;
+
+    const finalTotal = total - couponDiscount;
 
     const applyCoupon = async (code: string) => {
         const productIds = items.map(i => i.product.id);
@@ -147,7 +215,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     const removeCoupon = () => setAppliedCoupon(null);
 
     return (
-        <CartContext.Provider value={{ items, addToCart, removeFromCart, updateQuantity, clearCart, total, count, appliedCoupon, applyCoupon, removeCoupon }}>
+        <CartContext.Provider value={{ items: enrichedItems, addToCart, removeFromCart, updateQuantity, clearCart, total, finalTotal, couponDiscount, count, appliedCoupon, applyCoupon, removeCoupon }}>
             {children}
         </CartContext.Provider>
     );

@@ -1,9 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
-import { Product } from '@/lib/products';
+import { Product, Promotion } from '@/lib/products';
+import { apiClient } from '@/lib/api-client';
+import { calculateDiscountedPrice } from '@/lib/discountCalculator';
+import PriceDisplay from '@/components/ui/PriceDisplay';
 
 interface SuggestionCardProps {
     product: Product;
@@ -13,6 +16,16 @@ interface SuggestionCardProps {
 export default function SuggestionCard({ product, highlight }: SuggestionCardProps) {
     const { addToCart } = useCart();
     const [added, setAdded] = useState(false);
+    const [promotions, setPromotions] = useState<Promotion[]>([]);
+
+    useEffect(() => {
+        apiClient.getPromotionsForProduct(product.id).then(setPromotions).catch(() => {});
+    }, [product.id]);
+
+    const activePromo = promotions.find(p => p.active && !p.promoCode);
+    const discountedPrice = activePromo
+        ? calculateDiscountedPrice(product.price, activePromo.discountType, activePromo.discountValue)
+        : null;
 
     const handleAdd = () => {
         addToCart(product);
@@ -38,9 +51,11 @@ export default function SuggestionCard({ product, highlight }: SuggestionCardPro
                     fontSize: '0.75rem', fontWeight: 600, lineHeight: 1.3, color: '#1f2937',
                     display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'
                 }}>{product.name}</span>
-                <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--primary)' }}>
-                    £{product.price.toFixed(2)}
-                </span>
+                <PriceDisplay
+                    originalPrice={product.price}
+                    discountedPrice={discountedPrice}
+                    promotionalLabel={activePromo?.promotionalLabel}
+                />
                 <button onClick={handleAdd} style={{
                     marginTop: 'auto', padding: '0.35rem 0.5rem',
                     background: added ? 'var(--success)' : 'var(--primary)',

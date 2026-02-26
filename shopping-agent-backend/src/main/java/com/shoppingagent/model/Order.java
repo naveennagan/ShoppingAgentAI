@@ -26,6 +26,8 @@ public class Order {
         private String productId;
         private String productName;
         private double price;
+        private double originalPrice;
+        private String promotionalLabel;
         private int quantity;
         private String imageUrl;
     }

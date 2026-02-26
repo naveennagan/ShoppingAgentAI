@@ -72,24 +72,20 @@ public class PromotionService {
     }
 
     /**
-     * Returns a map of promotionId -> list of productIds for all active coupon promotions.
-     * Used by the AI assistant to know which products each coupon applies to.
+     * Returns a map of promotionId -> list of productIds for all promotions.
+     * Used by the AI assistant to know which products each promotion applies to.
      */
     public java.util.Map<String, List<String>> getCouponProductMappings() {
-        logger.debug("Fetching coupon-product mappings");
-        // Fetch all coupon promotions (promo_code is not null)
-        String promoJson = supabaseClient.get("promotions", "select=id,name,promo_code&promo_code=not.is.null");
-        List<Promotion> couponPromos = gson.fromJson(promoJson, PROMOTION_LIST_TYPE);
-        if (couponPromos == null || couponPromos.isEmpty()) {
+        logger.debug("Fetching all promotion-product mappings");
+        // Fetch all promotions
+        String promoJson = supabaseClient.get("promotions", "select=id");
+        List<Promotion> allPromos = gson.fromJson(promoJson, PROMOTION_LIST_TYPE);
+        if (allPromos == null || allPromos.isEmpty()) {
             return new java.util.HashMap<>();
         }
 
-        // Fetch all product_promotions rows for these promotion IDs
-        String promoIds = couponPromos.stream()
-                .map(Promotion::getId)
-                .collect(Collectors.joining(","));
-        String ppJson = supabaseClient.get("product_promotions",
-                "select=product_id,promotion_id&promotion_id=in.(" + promoIds + ")");
+        // Fetch all product_promotions rows
+        String ppJson = supabaseClient.get("product_promotions", "select=product_id,promotion_id");
         List<ProductPromotionIdRow> rows = gson.fromJson(ppJson,
                 new TypeToken<List<ProductPromotionIdRow>>() {}.getType());
 

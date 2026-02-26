@@ -90,6 +90,8 @@ CREATE TABLE order_items (
     product_id TEXT NOT NULL,
     product_name TEXT NOT NULL,
     price NUMERIC(10, 2) NOT NULL,
+    original_price NUMERIC(10, 2),
+    promotional_label TEXT,
     quantity INTEGER NOT NULL,
     image_url TEXT,
     created_at TIMESTAMPTZ DEFAULT now()

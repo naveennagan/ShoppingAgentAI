@@ -44,7 +44,7 @@ function resolveId(val: unknown, idMap: Record<string, string>): string {
 
 export async function POST(req: Request) {
     try {
-        const { message, history, cartItems } = await req.json();
+        const { message, history, cartItems, appliedCouponCode } = await req.json();
 
         if (!process.env.GEMINI_API_KEY) {
             return NextResponse.json({ action: 'none', message: 'API Key not configured' });
@@ -52,7 +52,7 @@ export async function POST(req: Request) {
 
         const { products, promotions, bundles, couponProductMappings } = await fetchBackendData();
         const { prompt: systemPrompt, idMap } = createShoppingAssistantPrompt(
-            products, promotions, bundles, couponProductMappings, cartItems ?? []
+            products, promotions, bundles, couponProductMappings, cartItems ?? [], appliedCouponCode ?? null
         );
 
         const model = genAI.getGenerativeModel({
@@ -82,17 +82,27 @@ export async function POST(req: Request) {
         const raw = result.response.text();
         const jsonResponse = JSON.parse(raw);
 
-        // Resolve short IDs → real UUIDs in payload and suggestions
-        if (jsonResponse.payload) {
-            if (typeof jsonResponse.payload === 'string') {
-                jsonResponse.payload = resolveId(jsonResponse.payload, idMap);
-            } else if (Array.isArray(jsonResponse.payload)) {
-                jsonResponse.payload = jsonResponse.payload.map((v: unknown) => resolveId(v, idMap));
-            } else if (typeof jsonResponse.payload === 'object') {
-                if (jsonResponse.payload.productId) {
-                    jsonResponse.payload.productId = resolveId(jsonResponse.payload.productId, idMap);
-                }
+        // Helper to resolve IDs in a payload
+        function resolvePayload(payload: any) {
+            if (!payload) return payload;
+            if (typeof payload === 'string') return resolveId(payload, idMap);
+            if (Array.isArray(payload)) return payload.map((v: unknown) => resolveId(v, idMap));
+            if (typeof payload === 'object') {
+                if (payload.productId) payload.productId = resolveId(payload.productId, idMap);
+                return payload;
             }
+            return payload;
+        }
+
+        // Resolve short IDs → real UUIDs in actions array
+        if (Array.isArray(jsonResponse.actions)) {
+            for (const act of jsonResponse.actions) {
+                act.payload = resolvePayload(act.payload);
+            }
+        }
+        // Also support legacy single action format
+        if (jsonResponse.payload) {
+            jsonResponse.payload = resolvePayload(jsonResponse.payload);
         }
         if (Array.isArray(jsonResponse.suggestions)) {
             jsonResponse.suggestions = jsonResponse.suggestions.map((v: unknown) => resolveId(v, idMap));

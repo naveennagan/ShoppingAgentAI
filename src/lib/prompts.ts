@@ -11,7 +11,8 @@ export function createShoppingAssistantPrompt(
   promotions: Promotion[] = [],
   bundles: Bundle[] = [],
   couponProductMappings: Record<string, string[]> = {},
-  cartItems: { productId: string; name: string; price: number; quantity: number }[] = []
+  cartItems: { productId: string; name: string; price: number; quantity: number }[] = [],
+  appliedCouponCode: string | null = null
 ): { prompt: string; idMap: Record<string, string> } {
 
   // Short index → real UUID (e.g. "p0" → "uuid-...")
@@ -34,10 +35,21 @@ export function createShoppingAssistantPrompt(
     }
   }
 
-  // Compact product lines — only include coupon info when it exists
+  // Build active auto-promo map: productId → "label(discount)" for non-coupon promos
+  const productAutoPromos: Record<string, string> = {};
+  for (const promo of promotions.filter(p => p.active && !p.promoCode)) {
+    // Map promo to products via couponProductMappings (also used for non-coupon promos)
+    for (const pid of couponProductMappings[promo.id] ?? []) {
+      const disc = promo.discountType === 'percentage' ? `${promo.discountValue}%` : `£${promo.discountValue}`;
+      productAutoPromos[pid] = `${promo.promotionalLabel ?? promo.name}(${disc})`;
+    }
+  }
+
+  // Compact product lines — include coupon and auto-promo info when they exist
   const productLines = products.map((p, i) => {
     const sid = `p${i}`;
     const coupons = productCoupons[p.id];
+    const autoPromo = productAutoPromos[p.id];
     const specsStr = p.specs && Object.keys(p.specs).length
       ? Object.entries(p.specs).map(([k, v]) => `${k}:${v}`).join(';')
       : '';
@@ -48,8 +60,10 @@ export function createShoppingAssistantPrompt(
       p.stock != null ? `stock:${p.stock}` : '',
       specsStr,
     ].filter(Boolean).join('|');
-    const base = `${sid}:${p.name}|£${p.price}|${extras}`;
-    return coupons?.length ? `${base}|coupons:${coupons.join(',')}` : base;
+    let base = `${sid}:${p.name}|£${p.price}|${extras}`;
+    if (autoPromo) base += `|deal:${autoPromo}`;
+    if (coupons?.length) base += `|coupons:${coupons.join(',')}`;
+    return base;
   }).join('\n');
 
   // Direct promos (label-based, no code)
@@ -80,16 +94,23 @@ ${productLines}
 ${directPromoLines ? `\nDIRECT_PROMOS: ${directPromoLines}` : ''}
 ${bundleLines ? `BUNDLES: ${bundleLines}` : ''}
 CART: ${cartLines}
+ACTIVE_COUPON: ${appliedCouponCode ?? 'none'}
 
 RULES:
 - Use short IDs (p0,p1…) in payload/suggestions, never UUIDs or names
 - Only mention a coupon if that product's line includes it
-- suggestions=[]: ONLY show product cards when user asks about SPECIFIC products by name/brand/model, comparisons, or right after add_to_cart. For vague/generic asks like "suggest one", "what should I buy", "recommend something", respond with text only (name the product in your message) and set suggestions to empty array []. Never show a product list for open-ended questions.
+- suggestions=[]: ONLY show product cards when user asks about SPECIFIC products by name/brand/model, comparisons, deals/discounts, or right after add_to_cart. For vague/generic asks like "suggest one", "what should I buy", "recommend something", respond with text only (name the product in your message) and set suggestions to empty array []. Never show a product list for open-ended questions.
+- When user asks about deals, discounts, or discounted products: include product IDs with a "deal:" tag in suggestions so they see the cards with prices. Products with "deal:" in their line have an active automatic discount already applied.
 - After add_to_cart: 1-sentence reason + 2-3 suggestions + ask to apply coupon if available
-- Coupon confirm flow: ask first, apply_coupon only after user says yes
+- When user asks about their orders or order history, use navigate("/orders") to take them to the orders page.
+- Coupon flow: if user explicitly says "apply <CODE>", use apply_coupon immediately. Only ask for confirmation when suggesting a coupon proactively.
+- ONLY ONE coupon can be active at a time. If a coupon is already applied and user wants a different one, you MUST remove_coupon first then apply_coupon. Never tell the user multiple coupons are applied — that is impossible.
+- ACTIVE_COUPON shows the currently applied coupon. If it says "none", no coupon is applied — do NOT claim one is already applied. Automatic deals (deal: tag on products) are NOT coupons — they apply automatically and don't count as an applied coupon.
 
-OUTPUT: {"action":"add_to_cart|update_quantity|set_all_quantities|remove_from_cart|clear_cart|navigate|autofill_checkout|apply_coupon|remove_coupon|none","payload":any,"suggestions":["p0","p1"],"message":"string","comparison":{"products":["Name A","Name B"],"rows":[{"field":"Price","values":["£x","£y"]},{"field":"Brand","values":["A","B"]}]}}
-Actions: add_to_cart(id|[ids]), update_quantity({productId,quantity}), remove_from_cart(id), navigate("/products"|"/cart"|"/checkout"), apply_coupon({code}), remove_coupon
+OUTPUT: {"actions":[{"action":"...","payload":any}],"suggestions":["p0","p1"],"message":"string","comparison":{"products":["Name A","Name B"],"rows":[{"field":"Price","values":["£x","£y"]},{"field":"Brand","values":["A","B"]}]}}
+actions is an ARRAY — use multiple entries when needed (e.g. remove_coupon then apply_coupon). Use [{"action":"none"}] when no action needed.
+Action types: add_to_cart(id|[ids]), update_quantity({productId,quantity}), set_all_quantities({quantity}), remove_from_cart(id), clear_cart, navigate("/products"|"/cart"|"/checkout"), autofill_checkout, apply_coupon({code}), remove_coupon
+- When switching coupons, ALWAYS emit both: [{"action":"remove_coupon"},{"action":"apply_coupon","payload":{"code":"..."}}]
 - When user asks to compare 2-3 products, populate the comparison field with a table. Include rows for: Price, Brand, Category, Rating, and all available spec fields (e.g. Storage, RAM, Display, Battery, Camera, OS, etc). Keep message brief.
 Test cards: 4242424242424242/TestUser/12/25/123`;
 

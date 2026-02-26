@@ -41,7 +41,7 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
     const [showQuickActions, setShowQuickActions] = useState(true);
 
     const router = useRouter();
-    const { addToCart, clearCart, updateQuantity, removeFromCart, items: cart, applyCoupon, removeCoupon } = useCart();
+    const { addToCart, clearCart, updateQuantity, removeFromCart, items: cart, applyCoupon, removeCoupon, appliedCoupon } = useCart();
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -75,7 +75,8 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     message: text, history,
-                    cartItems: cart.map(i => ({ productId: i.product.id, name: i.product.name, price: i.product.price, quantity: i.quantity }))
+                    cartItems: cart.map(i => ({ productId: i.product.id, name: i.product.name, price: i.product.price, quantity: i.quantity })),
+                    appliedCouponCode: appliedCoupon?.promotionName ?? null
                 })
             });
             const data = await res.json();
@@ -89,38 +90,47 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
                     .filter(Boolean) as Product[];
             }
 
-            if (data.action === 'navigate') {
-                router.push(data.payload);
-            } else if (data.action === 'add_to_cart') {
-                const { apiClient } = await import('@/lib/api-client');
-                const all = await apiClient.getProducts();
-                const ids = Array.isArray(data.payload) ? data.payload : [data.payload];
-                for (const id of ids) {
-                    const p = all.find((p: Product) => String(p.id) === String(id));
-                    if (p) addToCart(p);
+            // Support both single action (legacy) and actions array
+            const actionList: { action: string; payload?: any }[] = Array.isArray(data.actions)
+                ? data.actions
+                : data.action && data.action !== 'none'
+                    ? [{ action: data.action, payload: data.payload }]
+                    : [];
+
+            for (const act of actionList) {
+                if (act.action === 'navigate') {
+                    router.push(act.payload);
+                } else if (act.action === 'add_to_cart') {
+                    const { apiClient } = await import('@/lib/api-client');
+                    const all = await apiClient.getProducts();
+                    const ids = Array.isArray(act.payload) ? act.payload : [act.payload];
+                    for (const id of ids) {
+                        const p = all.find((p: Product) => String(p.id) === String(id));
+                        if (p) addToCart(p);
+                    }
+                } else if (act.action === 'clear_cart') {
+                    clearCart();
+                } else if (act.action === 'update_quantity') {
+                    updateQuantity(act.payload.productId, act.payload.quantity);
+                } else if (act.action === 'set_all_quantities') {
+                    cart.forEach(item => updateQuantity(item.product.id, act.payload.quantity));
+                } else if (act.action === 'remove_from_cart') {
+                    removeFromCart(act.payload);
+                } else if (act.action === 'autofill_checkout') {
+                    window.dispatchEvent(new CustomEvent('autofill-checkout', { detail: act.payload || {} }));
+                    setTimeout(() => router.push('/checkout'), 100);
+                } else if (act.action === 'apply_coupon' && act.payload?.code) {
+                    try {
+                        await applyCoupon(act.payload.code);
+                    } catch (err) {
+                        const msg = err instanceof Error ? err.message : 'Failed to apply coupon';
+                        setMessages(prev => [...prev, { role: 'ai', text: `Couldn't apply that code: ${msg}` }]);
+                        setIsTyping(false);
+                        return;
+                    }
+                } else if (act.action === 'remove_coupon') {
+                    removeCoupon();
                 }
-            } else if (data.action === 'clear_cart') {
-                clearCart();
-            } else if (data.action === 'update_quantity') {
-                updateQuantity(data.payload.productId, data.payload.quantity);
-            } else if (data.action === 'set_all_quantities') {
-                cart.forEach(item => updateQuantity(item.product.id, data.payload.quantity));
-            } else if (data.action === 'remove_from_cart') {
-                removeFromCart(data.payload);
-            } else if (data.action === 'autofill_checkout') {
-                window.dispatchEvent(new CustomEvent('autofill-checkout', { detail: data.payload || {} }));
-                setTimeout(() => router.push('/checkout'), 100);
-            } else if (data.action === 'apply_coupon' && data.payload?.code) {
-                try {
-                    await applyCoupon(data.payload.code);
-                } catch (err) {
-                    const msg = err instanceof Error ? err.message : 'Failed to apply coupon';
-                    setMessages(prev => [...prev, { role: 'ai', text: `Couldn't apply that code: ${msg}` }]);
-                    setIsTyping(false);
-                    return;
-                }
-            } else if (data.action === 'remove_coupon') {
-                removeCoupon();
             }
 
             setMessages(prev => [...prev, { role: 'ai', text: data.message, suggestions, comparison: data.comparison }]);
@@ -188,7 +198,7 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
                     }}>
                         <ChatBubble role={msg.role}>{msg.text}</ChatBubble>
 
-                        {msg.comparison && msg.comparison.rows.length > 0 && (
+                        {msg.comparison && Array.isArray(msg.comparison.rows) && msg.comparison.rows.length > 0 && (
                             <div style={{ width: '100%', maxWidth: `${panelWidth - 40}px` }}>
                                 <ComparisonTable comparison={msg.comparison} />
                             </div>

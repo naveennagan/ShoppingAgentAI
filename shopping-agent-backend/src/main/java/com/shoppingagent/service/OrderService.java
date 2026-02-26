@@ -5,6 +5,8 @@ import com.google.gson.reflect.TypeToken;
 import com.shoppingagent.model.Cart;
 import com.shoppingagent.model.Order;
 import com.shoppingagent.model.Product;
+import com.shoppingagent.model.Promotion;
+import com.shoppingagent.util.DiscountCalculator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -26,12 +28,14 @@ public class OrderService {
     private final SupabaseClient supabaseClient;
     private final ProductService productService;
     private final CartService cartService;
+    private final PromotionService promotionService;
     private final Gson gson = new Gson();
 
-    public OrderService(SupabaseClient supabaseClient, ProductService productService, CartService cartService) {
+    public OrderService(SupabaseClient supabaseClient, ProductService productService, CartService cartService, PromotionService promotionService) {
         this.supabaseClient = supabaseClient;
         this.productService = productService;
         this.cartService = cartService;
+        this.promotionService = promotionService;
     }
 
     public Order createOrder(String sessionId, String shippingAddress, String paymentMethod) {
@@ -47,9 +51,29 @@ public class OrderService {
             Optional<Product> product = productService.getProductById(cartItem.getProductId());
             if (product.isPresent()) {
                 Product p = product.get();
+                double originalPrice = p.getPrice();
+                double effectivePrice = originalPrice;
+                String promotionalLabel = null;
+
+                try {
+                    List<Promotion> promotions = promotionService.getPromotionsForProduct(p.getId());
+                    Optional<Promotion> activeAutoPromo = promotions.stream()
+                            .filter(promo -> promo.isActive() && promo.getPromoCode() == null)
+                            .findFirst();
+                    if (activeAutoPromo.isPresent()) {
+                        Promotion promo = activeAutoPromo.get();
+                        effectivePrice = DiscountCalculator.calculateDiscountedPrice(
+                                originalPrice, promo.getDiscountType(), promo.getDiscountValue());
+                        promotionalLabel = promo.getPromotionalLabel();
+                    }
+                } catch (Exception e) {
+                    logger.warn("Failed to fetch promotions for product {}, using original price", p.getId(), e);
+                }
+
                 orderItems.add(new Order.OrderItem(
-                        p.getId(), p.getName(), p.getPrice(), cartItem.getQuantity(), p.getImage()));
-                totalAmount += p.getPrice() * cartItem.getQuantity();
+                        p.getId(), p.getName(), effectivePrice, originalPrice, promotionalLabel,
+                        cartItem.getQuantity(), p.getImage()));
+                totalAmount += effectivePrice * cartItem.getQuantity();
             }
         }
 
@@ -75,6 +99,8 @@ public class OrderService {
             itemRow.put("product_id", item.getProductId());
             itemRow.put("product_name", item.getProductName());
             itemRow.put("price", item.getPrice());
+            itemRow.put("original_price", item.getOriginalPrice());
+            itemRow.put("promotional_label", item.getPromotionalLabel());
             itemRow.put("quantity", item.getQuantity());
             itemRow.put("image_url", item.getImageUrl());
             supabaseClient.post("order_items", gson.toJson(itemRow));
@@ -119,7 +145,9 @@ public class OrderService {
     private Order toOrder(OrderRow row) {
         List<Order.OrderItem> items = row.order_items == null ? Collections.emptyList()
                 : row.order_items.stream().map(i -> new Order.OrderItem(
-                        i.product_id, i.product_name, i.price, i.quantity, i.image_url))
+                        i.product_id, i.product_name, i.price,
+                        i.original_price, i.promotional_label,
+                        i.quantity, i.image_url))
                 .collect(Collectors.toList());
 
         java.time.LocalDateTime date = row.created_at != null
@@ -147,6 +175,8 @@ public class OrderService {
         String product_id;
         String product_name;
         double price;
+        double original_price;
+        String promotional_label;
         int quantity;
         String image_url;
     }

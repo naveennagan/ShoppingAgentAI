@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import PriceDisplay from '@/components/ui/PriceDisplay';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
@@ -9,6 +10,8 @@ interface OrderItem {
     productId: string;
     productName: string;
     price: number;
+    originalPrice?: number;
+    promotionalLabel?: string | null;
     quantity: number;
     imageUrl: string;
 }
@@ -127,18 +130,26 @@ export default function OrdersPage() {
 
                             {/* Items */}
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', margin: '1rem 0' }}>
-                                {order.items.map((item, i) => (
-                                    <div key={i} style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                                        <img src={item.imageUrl} alt={item.productName}
-                                            style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '8px', background: '#f3f4f6', flexShrink: 0 }} />
-                                        <div style={{ flex: 1 }}>
-                                            <p style={{ fontWeight: 600, margin: 0 }}>{item.productName}</p>
-                                            <p style={{ color: '#6b7280', fontSize: '0.85rem', margin: '0.1rem 0 0' }}>Qty: {item.quantity}</p>
+                                {order.items.map((item, i) => {
+                                    const effectiveOriginalPrice = item.originalPrice && item.originalPrice > 0 ? item.originalPrice : item.price;
+                                    const isDiscounted = item.price !== effectiveOriginalPrice;
+                                    return (
+                                        <div key={i} style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                                            <img src={item.imageUrl} alt={item.productName}
+                                                style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '8px', background: '#f3f4f6', flexShrink: 0 }} />
+                                            <div style={{ flex: 1 }}>
+                                                <p style={{ fontWeight: 600, margin: 0 }}>{item.productName}</p>
+                                                <p style={{ color: '#6b7280', fontSize: '0.85rem', margin: '0.1rem 0 0' }}>Qty: {item.quantity}</p>
+                                            </div>
+                                            <PriceDisplay
+                                                originalPrice={effectiveOriginalPrice * item.quantity}
+                                                discountedPrice={isDiscounted ? item.price * item.quantity : null}
+                                                promotionalLabel={item.promotionalLabel}
+                                            />
                                         </div>
-                                        <span style={{ fontWeight: 700 }}>£{(item.price * item.quantity).toFixed(2)}</span>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
 
                             {/* Footer */}
