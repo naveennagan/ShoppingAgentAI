@@ -134,8 +134,8 @@ public class OrderService {
      */
     @Scheduled(fixedRate = 3_600_000)
     public void deleteOldOrders() {
-        String cutoff = OffsetDateTime.now().minusDays(3)
-                .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+        String cutoff = OffsetDateTime.now(java.time.ZoneOffset.UTC).minusDays(3)
+                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'"));
         logger.info("Cleaning up orders older than {}", cutoff);
         supabaseClient.delete("orders", "created_at=lt." + cutoff);
     }

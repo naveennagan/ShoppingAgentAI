@@ -2,6 +2,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { NextResponse } from 'next/server';
 import { Product, Promotion, Bundle } from '@/lib/products';
 import { createShoppingAssistantPrompt } from '@/lib/prompts';
+import type { BroadbandPlan } from '@/types/broadband';
 
 const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
@@ -44,7 +45,7 @@ function resolveId(val: unknown, idMap: Record<string, string>): string {
 
 export async function POST(req: Request) {
     try {
-        const { message, history, cartItems, appliedCouponCode } = await req.json();
+        const { message, history, cartItems, appliedCouponCode, broadbandPlans } = await req.json();
 
         if (!process.env.GEMINI_API_KEY) {
             return NextResponse.json({ action: 'none', message: 'API Key not configured' });
@@ -52,7 +53,8 @@ export async function POST(req: Request) {
 
         const { products, promotions, bundles, couponProductMappings } = await fetchBackendData();
         const { prompt: systemPrompt, idMap } = createShoppingAssistantPrompt(
-            products, promotions, bundles, couponProductMappings, cartItems ?? [], appliedCouponCode ?? null
+            products, promotions, bundles, couponProductMappings, cartItems ?? [], appliedCouponCode ?? null,
+            (broadbandPlans as BroadbandPlan[]) ?? []
         );
 
         const model = genAI.getGenerativeModel({

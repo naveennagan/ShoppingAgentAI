@@ -1,3 +1,6 @@
+import type { BroadbandAddress, BroadbandAddon, BroadbandPlan } from '@/types/broadband';
+import type { Appointment, AppointmentRequest, CheckoutSession, CustomerDetails, Subscription } from '@/types/checkout';
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 export const apiClient = {
@@ -45,6 +48,27 @@ export const apiClient = {
       body: JSON.stringify(productIds)
     });
     if (!res.ok) throw new Error('Failed to add batch to cart');
+    return res.json();
+  },
+
+  async addBroadbandServiceToCart(sessionId: string, item: {
+    itemId: string;
+    name: string;
+    price: number;
+    quantity: number;
+    item_type: 'broadband_service';
+    fulfillment_type: 'installation';
+    broadband_ref: string;
+    display_name: string;
+    display_summary: string;
+    unit_price: number;
+  }) {
+    const res = await fetch(`${API_URL}/api/cart/${sessionId}/add-broadband`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(item)
+    });
+    if (!res.ok) throw new Error('Failed to add broadband service to cart');
     return res.json();
   },
 
@@ -101,7 +125,47 @@ export const apiClient = {
     return res.json();
   },
 
-  // Coupon APIs
+  // Broadband APIs
+  async getAddresses(postcode: string): Promise<BroadbandAddress[]> {
+    const res = await fetch(`${API_URL}/api/broadband/addresses?postcode=${encodeURIComponent(postcode)}`);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.message || 'Failed to fetch addresses');
+    }
+    return res.json();
+  },
+
+  async getAddons(): Promise<BroadbandAddon[]> {
+    const res = await fetch(`${API_URL}/api/broadband/addons`);
+    if (!res.ok) return [];
+    return res.json();
+  },
+
+  async getPlansForAddress(uprn: string): Promise<BroadbandPlan[]> {
+    const eligRes = await fetch(`${API_URL}/api/broadband/eligibility`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uprn })
+    });
+    if (!eligRes.ok) {
+      const data = await eligRes.json().catch(() => ({}));
+      throw new Error(data.message || 'Eligibility check failed');
+    }
+    const eligibility = await eligRes.json();
+    if (!eligibility.eligible) return [];
+
+    const plansRes = await fetch(`${API_URL}/api/broadband/products`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uprn })
+    });
+    if (!plansRes.ok) {
+      const data = await plansRes.json().catch(() => ({}));
+      throw new Error(data.message || 'Failed to fetch broadband plans');
+    }
+    return plansRes.json();
+  },
+
   async validateCouponCode(code: string, productIds: string[]) {
     const res = await fetch(`${API_URL}/api/promotions/validate-code`, {
       method: 'POST',
@@ -111,6 +175,108 @@ export const apiClient = {
     if (!res.ok) {
       const data = await res.json();
       throw new Error(data.error || 'Failed to validate coupon code');
+    }
+    return res.json();
+  },
+
+  // Checkout APIs
+  async createCheckoutSession(sessionId: string): Promise<CheckoutSession> {
+    const res = await fetch(`${API_URL}/api/checkout/session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId })
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.message || 'Failed to create checkout session');
+    }
+    return res.json();
+  },
+
+  async processDevicePayment(
+    sessionId: string,
+    paymentDetails: { cardholderName: string; last4Digits: string }
+  ) {
+    const res = await fetch(`${API_URL}/api/checkout/device-payment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId, ...paymentDetails })
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.message || 'Failed to process device payment');
+    }
+    return res.json();
+  },
+
+  async getAvailableSlots(): Promise<Array<{ date: string; slot: string; timeRange: string; available: boolean }>> {
+    const res = await fetch(`${API_URL}/api/checkout/slots`);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.message || 'Failed to fetch available slots');
+    }
+    return res.json();
+  },
+
+  async bookAppointment(request: AppointmentRequest): Promise<Appointment> {
+    const res = await fetch(`${API_URL}/api/checkout/appointments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request)
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.message || 'Failed to book appointment');
+    }
+    return res.json();
+  },
+
+  async getAppointment(appointmentId: string): Promise<Appointment> {
+    const res = await fetch(`${API_URL}/api/checkout/appointments/${appointmentId}`);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.message || 'Failed to fetch appointment');
+    }
+    return res.json();
+  },
+
+  async getSubscription(sessionId: string): Promise<Subscription | null> {
+    const res = await fetch(`${API_URL}/api/checkout/subscriptions/${sessionId}`);
+    if (res.status === 404) return null;
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.message || 'Failed to fetch subscription');
+    }
+    return res.json();
+  },
+
+  async saveCustomerDetails(sessionId: string, details: CustomerDetails): Promise<void> {
+    const res = await fetch(`${API_URL}/api/checkout/session/${sessionId}/customer-details`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(details)
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.message || 'Failed to save customer details');
+    }
+  },
+
+  async getCustomerDetails(sessionId: string): Promise<CustomerDetails | null> {
+    const res = await fetch(`${API_URL}/api/checkout/session/${sessionId}/customer-details`);
+    if (res.status === 404) return null;
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.message || 'Failed to fetch customer details');
+    }
+    return res.json();
+  },
+
+  async getSubscriptions(sessionId: string): Promise<Subscription[]> {
+    const res = await fetch(`${API_URL}/api/checkout/subscriptions/${sessionId}/all`);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.message || 'Failed to fetch subscriptions');
     }
     return res.json();
   }

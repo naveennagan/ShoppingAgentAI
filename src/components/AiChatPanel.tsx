@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useCart } from '@/context/CartContext';
 import { X, Send, Sparkles, ShoppingCart, Tag } from 'lucide-react';
 import { Product } from '@/lib/products';
+import type { BroadbandPlan } from '@/types/broadband';
 import { ChatBubble, Chip, ComparisonTable, SuggestionCard, TypingIndicator } from './ui';
 
 interface AiChatPanelProps {
@@ -41,8 +42,16 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
     const [showQuickActions, setShowQuickActions] = useState(true);
 
     const router = useRouter();
-    const { addToCart, clearCart, updateQuantity, removeFromCart, items: cart, applyCoupon, removeCoupon, appliedCoupon } = useCart();
+    const { addToCart, clearCart, updateQuantity, removeFromCart, items: cart, applyCoupon, removeCoupon, appliedCoupon, addBroadbandServiceToCart } = useCart();
     const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    // Listen for broadband plans loaded on the broadband page
+    const [broadbandPlans, setBroadbandPlans] = useState<BroadbandPlan[]>([]);
+    useEffect(() => {
+        const handler = (e: CustomEvent<BroadbandPlan[]>) => setBroadbandPlans(e.detail ?? []);
+        window.addEventListener('broadband-plans-loaded' as any, handler);
+        return () => window.removeEventListener('broadband-plans-loaded' as any, handler);
+    }, []);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -76,7 +85,8 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
                 body: JSON.stringify({
                     message: text, history,
                     cartItems: cart.map(i => ({ productId: i.product.id, name: i.product.name, price: i.product.price, quantity: i.quantity })),
-                    appliedCouponCode: appliedCoupon?.promotionName ?? null
+                    appliedCouponCode: appliedCoupon?.promotionName ?? null,
+                    broadbandPlans: broadbandPlans.length > 0 ? broadbandPlans : undefined
                 })
             });
             const data = await res.json();
@@ -130,6 +140,12 @@ export default function AiChatPanel({ isOpen, onClose, onWidthChange }: AiChatPa
                     }
                 } else if (act.action === 'remove_coupon') {
                     removeCoupon();
+                } else if (act.action === 'add_broadband_to_cart') {
+                    const planId = String(act.payload);
+                    const plan = broadbandPlans.find(p => p.planId === planId);
+                    if (plan) {
+                        await addBroadbandServiceToCart(plan, planId);
+                    }
                 }
             }
 

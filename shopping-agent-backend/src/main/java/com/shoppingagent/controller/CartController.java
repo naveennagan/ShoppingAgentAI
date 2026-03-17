@@ -107,4 +107,19 @@ public class CartController {
                     .body("Service temporarily unavailable");
         }
     }
+
+    @PostMapping("/{sessionId}/add-broadband")
+    public ResponseEntity<?> addBroadbandServiceToCart(@PathVariable String sessionId,
+                                                        @RequestBody CartService.BroadbandCartItemRequest request) {
+        logger.info("POST /api/cart/{}/add-broadband - Adding broadband service item: {}", sessionId, request.itemId);
+        try {
+            Cart cart = cartService.addBroadbandServiceToCart(sessionId, request);
+            logger.info("Cart now has {} items", cart.getItems().size());
+            return ResponseEntity.ok(cart);
+        } catch (SupabaseConnectionException e) {
+            logger.error("Supabase connection failed: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body("Service temporarily unavailable");
+        }
+    }
 }

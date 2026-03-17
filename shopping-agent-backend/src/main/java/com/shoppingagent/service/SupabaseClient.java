@@ -119,7 +119,15 @@ public class SupabaseClient {
     private String execute(HttpRequest request) {
         try {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            int status = response.statusCode();
+            if (status < 200 || status >= 300) {
+                throw new SupabaseConnectionException(
+                        "Supabase returned HTTP " + status + " for " + request.method()
+                                + " " + request.uri().getPath() + ": " + response.body(), null);
+            }
             return response.body();
+        } catch (SupabaseConnectionException e) {
+            throw e;
         } catch (IOException e) {
             throw new SupabaseConnectionException("Failed to connect to Supabase: " + e.getMessage(), e);
         } catch (InterruptedException e) {

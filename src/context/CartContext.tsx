@@ -4,6 +4,8 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { Product, Promotion, CouponValidationResult } from '@/lib/products';
 import { apiClient } from '@/lib/api-client';
 import { calculateDiscountedPrice } from '@/lib/discountCalculator';
+import { ItemType, FulfillmentType } from '@/types/checkout';
+import { BroadbandPlan } from '@/types/broadband';
 
 const SESSION_ID = typeof window !== 'undefined' ? (localStorage.getItem('sessionId') || (() => {
     const id = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
@@ -48,6 +50,13 @@ export interface CartItem {
     product: Product;
     quantity: number;
     promotion?: CartItemPromotion;
+    // Extended fields for broadband service items (all optional for backward compatibility)
+    item_type?: ItemType;
+    fulfillment_type?: FulfillmentType;
+    broadband_ref?: string;
+    display_name?: string;
+    display_summary?: string;
+    unit_price?: number;
 }
 
 interface CartContextType {
@@ -63,6 +72,7 @@ interface CartContextType {
     appliedCoupon: CouponValidationResult | null;
     applyCoupon: (code: string) => Promise<void>;
     removeCoupon: () => void;
+    addBroadbandServiceToCart: (plan: BroadbandPlan, userSelectionId: string, displaySummary?: string) => Promise<void>;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -116,12 +126,31 @@ export function CartProvider({ children }: { children: ReactNode }) {
             try {
                 const backendCart = await apiClient.getCart(SESSION_ID);
                 const products = await apiClient.getProducts();
-                
+
                 const cartItems: CartItem[] = backendCart.items.map((item: any) => {
+                    // Broadband service items have no productId — reconstruct from display fields
+                    if (item.itemType === 'broadband_service') {
+                        return {
+                            product: {
+                                id: `broadband-${item.displayName?.replace(/\s+/g, '-').toLowerCase() ?? 'plan'}`,
+                                name: item.displayName ?? 'Broadband Plan',
+                                price: item.unitPrice ?? 0,
+                                category: 'broadband',
+                                description: item.displaySummary ?? '',
+                                image: '',
+                            } as Product,
+                            quantity: item.quantity,
+                            item_type: 'broadband_service' as const,
+                            fulfillment_type: 'installation' as const,
+                            display_name: item.displayName,
+                            display_summary: item.displaySummary,
+                            unit_price: item.unitPrice,
+                        };
+                    }
                     const product = products.find((p: Product) => p.id === item.productId);
                     return product ? { product, quantity: item.quantity } : null;
                 }).filter(Boolean) as CartItem[];
-                
+
                 setItems(cartItems);
             } catch (error) {
                 console.error('Failed to load cart:', error);
@@ -214,8 +243,53 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
     const removeCoupon = () => setAppliedCoupon(null);
 
+    const addBroadbandServiceToCart = async (plan: BroadbandPlan, userSelectionId: string, displaySummary?: string) => {
+        const summary = displaySummary ?? `${plan.downloadSpeedMbps}Mbps / ${plan.uploadSpeedMbps}Mbps · ${plan.technologyType} · £${plan.monthlyPrice}/mo`;
+        const broadbandItem: CartItem = {
+            product: {
+                id: `broadband-${plan.planId}`,
+                name: plan.name,
+                price: plan.monthlyPrice,
+                category: 'broadband',
+                description: summary,
+                image: '',
+            } as Product,
+            quantity: 1,
+            item_type: 'broadband_service',
+            fulfillment_type: 'installation',
+            broadband_ref: userSelectionId,
+            display_name: plan.name,
+            display_summary: summary,
+            unit_price: plan.monthlyPrice,
+        };
+
+        try {
+            await apiClient.addBroadbandServiceToCart(SESSION_ID, {
+                itemId: broadbandItem.product.id,
+                name: plan.name,
+                price: plan.monthlyPrice,
+                quantity: 1,
+                item_type: 'broadband_service',
+                fulfillment_type: 'installation',
+                broadband_ref: userSelectionId,
+                display_name: plan.name,
+                display_summary: summary,
+                unit_price: plan.monthlyPrice,
+            });
+
+            // Replace any existing broadband service item — only one at a time
+            setItems(prev => {
+                const withoutBroadband = prev.filter(i => i.item_type !== 'broadband_service');
+                return [...withoutBroadband, broadbandItem];
+            });
+        } catch (error) {
+            console.error('Failed to add broadband service to cart:', error);
+            throw error; // re-throw so the caller can show an error to the user
+        }
+    };
+
     return (
-        <CartContext.Provider value={{ items: enrichedItems, addToCart, removeFromCart, updateQuantity, clearCart, total, finalTotal, couponDiscount, count, appliedCoupon, applyCoupon, removeCoupon }}>
+        <CartContext.Provider value={{ items: enrichedItems, addToCart, removeFromCart, updateQuantity, clearCart, total, finalTotal, couponDiscount, count, appliedCoupon, applyCoupon, removeCoupon, addBroadbandServiceToCart }}>
             {children}
         </CartContext.Provider>
     );

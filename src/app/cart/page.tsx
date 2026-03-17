@@ -74,13 +74,19 @@ export default function CartPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     {items.map(({ product, quantity, promotion }) => (
                         <div key={product.id} className="card" style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                            <div style={{ width: '100px', height: '100px', background: 'var(--surface-hover)', borderRadius: '8px', overflow: 'hidden', flexShrink: 0 }}>
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                    src={product.image}
-                                    alt={product.name}
-                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                />
+                            <div style={{ width: '100px', height: '100px', background: 'var(--surface-hover)', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                {product.image ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                        src={product.image}
+                                        alt={product.name}
+                                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                    />
+                                ) : (
+                                    <span style={{ fontSize: '2.5rem' }}>
+                                        {product.category === 'broadband' ? '📡' : '📦'}
+                                    </span>
+                                )}
                             </div>
 
                             <div style={{ flex: 1 }}>

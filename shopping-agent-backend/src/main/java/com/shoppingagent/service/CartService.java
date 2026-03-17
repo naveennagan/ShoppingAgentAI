@@ -27,12 +27,14 @@ public class CartService {
 
     public Cart getCart(String sessionId) {
         logger.debug("Fetching cart for session: {}", sessionId);
-        String json = supabaseClient.get(TABLE, "select=product_id,quantity&session_id=eq." + sessionId);
+        String json = supabaseClient.get(TABLE,
+                "select=id,product_id,item_type,display_name,display_summary,unit_price,quantity&session_id=eq." + sessionId);
         List<CartItemRow> rows = gson.fromJson(json, new TypeToken<List<CartItemRow>>() {}.getType());
         List<Cart.CartItem> items = new ArrayList<>();
         if (rows != null) {
             for (CartItemRow row : rows) {
-                items.add(new Cart.CartItem(row.product_id, row.quantity));
+                items.add(new Cart.CartItem(row.product_id, row.quantity,
+                        row.item_type, row.display_name, row.display_summary, row.unit_price));
             }
         }
         return new Cart(sessionId, items);
@@ -68,8 +70,14 @@ public class CartService {
 
     public Cart removeFromCart(String sessionId, String productId) {
         logger.debug("Removing from cart - session: {}, product: {}", sessionId, productId);
-        supabaseClient.delete(TABLE,
-                "session_id=eq." + sessionId + "&product_id=eq." + productId);
+        // Broadband service items have no product_id — identify by item_type
+        if (productId != null && productId.startsWith("broadband-")) {
+            supabaseClient.delete(TABLE,
+                    "session_id=eq." + sessionId + "&item_type=eq.broadband_service");
+        } else {
+            supabaseClient.delete(TABLE,
+                    "session_id=eq." + sessionId + "&product_id=eq." + productId);
+        }
         return getCart(sessionId);
     }
 
@@ -97,9 +105,50 @@ public class CartService {
         return getCart(sessionId);
     }
 
+    public Cart addBroadbandServiceToCart(String sessionId, BroadbandCartItemRequest request) {
+        logger.debug("Adding broadband service to cart - session: {}, item: {}", sessionId, request.itemId);
+
+        // Remove any existing broadband service item for this session (only one at a time)
+        supabaseClient.delete(TABLE,
+                "session_id=eq." + sessionId + "&item_type=eq.broadband_service");
+
+        // Insert new broadband service cart item
+        // product_id is explicitly set to null (column was made nullable by cart-broadband-patch.sql)
+        JsonObject body = new JsonObject();
+        body.addProperty("session_id", sessionId);
+        body.add("product_id", com.google.gson.JsonNull.INSTANCE);
+        body.addProperty("item_type", "broadband_service");
+        body.addProperty("fulfillment_type", "installation");
+        body.addProperty("display_name", request.display_name);
+        body.addProperty("display_summary", request.display_summary);
+        body.addProperty("unit_price", request.unit_price);
+        body.addProperty("quantity", request.quantity);
+        supabaseClient.post(TABLE, gson.toJson(body));
+
+        return getCart(sessionId);
+    }
+
+    /** Request body for adding a broadband service item to the cart. */
+    public static class BroadbandCartItemRequest {
+        public String itemId;
+        public String name;
+        public double price;
+        public int quantity;
+        public String item_type;
+        public String fulfillment_type;
+        public String broadband_ref;
+        public String display_name;
+        public String display_summary;
+        public double unit_price;
+    }
+
     /** Internal row type for deserializing cart_items rows with product_id and quantity. */
     private static class CartItemRow {
         String product_id;
+        String item_type;
+        String display_name;
+        String display_summary;
+        Double unit_price;
         int quantity;
     }
 

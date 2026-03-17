@@ -1,4 +1,5 @@
 import { Product, Promotion, Bundle } from '@/lib/products';
+import type { BroadbandPlan } from '@/types/broadband';
 
 /**
  * Builds a compact system prompt.
@@ -12,7 +13,8 @@ export function createShoppingAssistantPrompt(
   bundles: Bundle[] = [],
   couponProductMappings: Record<string, string[]> = {},
   cartItems: { productId: string; name: string; price: number; quantity: number }[] = [],
-  appliedCouponCode: string | null = null
+  appliedCouponCode: string | null = null,
+  broadbandPlans: BroadbandPlan[] = []
 ): { prompt: string; idMap: Record<string, string> } {
 
   // Short index → real UUID (e.g. "p0" → "uuid-...")
@@ -87,6 +89,16 @@ export function createShoppingAssistantPrompt(
     return `${sid}:${item.name}×${item.quantity}@£${item.price}${couponStr}`;
   }).join('; ');
 
+  // Broadband plans (only present when user is on the broadband page)
+  const broadbandSection = broadbandPlans.length > 0
+    ? `\nBROADBAND_PLANS (planId:name|down|up|tech|contract|price):\n` +
+      broadbandPlans.map(p =>
+        `${p.planId}:${p.name}|down:${p.downloadSpeedMbps}Mbps|up:${p.uploadSpeedMbps}Mbps` +
+        `|tech:${p.technologyType}|contract:${p.contractLengthMonths}mo|£${p.monthlyPrice}/mo` +
+        (p.promotionalLabel ? `|promo:${p.promotionalLabel}` : '')
+      ).join('\n')
+    : '';
+
   const prompt = `Shopping assistant for AI.Shop. Respond ONLY in JSON.
 
 PRODUCTS (id:name|price|brand[|coupons]):
@@ -94,7 +106,7 @@ ${productLines}
 ${directPromoLines ? `\nDIRECT_PROMOS: ${directPromoLines}` : ''}
 ${bundleLines ? `BUNDLES: ${bundleLines}` : ''}
 CART: ${cartLines}
-ACTIVE_COUPON: ${appliedCouponCode ?? 'none'}
+ACTIVE_COUPON: ${appliedCouponCode ?? 'none'}${broadbandSection}
 
 RULES:
 - Use short IDs (p0,p1…) in payload/suggestions, never UUIDs or names
@@ -110,9 +122,10 @@ RULES:
 
 OUTPUT: {"actions":[{"action":"...","payload":any}],"suggestions":["p0","p1"],"message":"string","comparison":{"products":["Name A","Name B"],"rows":[{"field":"Price","values":["£x","£y"]},{"field":"Brand","values":["A","B"]}]}}
 actions is an ARRAY — use multiple entries when needed (e.g. remove_coupon then apply_coupon). Use [{"action":"none"}] when no action needed.
-Action types: add_to_cart(id|[ids]), update_quantity({productId,quantity}), set_all_quantities({quantity}), remove_from_cart(id), clear_cart, navigate("/products"|"/cart"|"/checkout"), autofill_checkout, apply_coupon({code}), remove_coupon
+Action types: add_to_cart(id|[ids]), update_quantity({productId,quantity}), set_all_quantities({quantity}), remove_from_cart(id), clear_cart, navigate("/products"|"/cart"|"/checkout"), autofill_checkout, apply_coupon({code}), remove_coupon, add_broadband_to_cart(planId)
 - When switching coupons, ALWAYS emit both: [{"action":"remove_coupon"},{"action":"apply_coupon","payload":{"code":"..."}}]
 - When user asks to compare 2-3 products, populate the comparison field with a table. Include rows for: Price, Brand, Category, Rating, and all available spec fields (e.g. Storage, RAM, Display, Battery, Camera, OS, etc). Keep message brief.
+- BROADBAND: If BROADBAND_PLANS are listed, you can recommend plans and add them to cart. Use add_broadband_to_cart with the planId. When recommending, explain why the plan suits the user's needs (speed, usage, price). You may suggest up to 2 alternatives.
 Test cards: 4242424242424242/TestUser/12/25/123`;
 
   return { prompt, idMap };
