@@ -126,6 +126,13 @@ export default function CheckoutPage() {
     setSession(prev => {
       if (!prev) return prev;
       const updatedStatus = { ...prev.broadbandBookingStatus, [broadbandItemId]: appt.appointmentId };
+      // Remove broadband items from cart once all are booked
+      const allBooked = Object.values(updatedStatus).every(v => v !== 'unbooked');
+      if (allBooked) {
+        for (const item of items.filter(i => i.item_type === 'broadband_service')) {
+          removeFromCart(item.product.id);
+        }
+      }
       return { ...prev, broadbandBookingStatus: updatedStatus };
     });
   };

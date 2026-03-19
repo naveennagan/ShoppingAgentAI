@@ -155,7 +155,8 @@ public class OrderService {
                 : java.time.LocalDateTime.now();
 
         return new Order(row.id, row.session_id, items, row.total_amount,
-                row.status, date, row.shipping_address, row.payment_method);
+                row.status, date, row.shipping_address, row.payment_method,
+                row.order_type, row.service_status, row.monthly_total);
     }
 
     // --- Supabase row POJOs ---
@@ -168,6 +169,9 @@ public class OrderService {
         String shipping_address;
         String payment_method;
         String created_at;
+        String order_type;
+        String service_status;
+        double monthly_total;
         List<OrderItemRow> order_items;
     }
 

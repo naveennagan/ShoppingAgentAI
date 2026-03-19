@@ -27,10 +27,12 @@ public class CheckoutService {
     private static final Logger logger = LoggerFactory.getLogger(CheckoutService.class);
 
     private final SupabaseClient supabaseClient;
+    private final PromotionService promotionService;
     private final Gson gson;
 
-    public CheckoutService(SupabaseClient supabaseClient) {
+    public CheckoutService(SupabaseClient supabaseClient, PromotionService promotionService) {
         this.supabaseClient = supabaseClient;
+        this.promotionService = promotionService;
         this.gson = new Gson();
     }
 
@@ -68,6 +70,20 @@ public class CheckoutService {
                     displayName = p.name;
                     unitPrice = p.price;
                     displaySummary = p.description;
+
+                    // Apply active auto-promotions to get discounted price
+                    try {
+                        List<com.shoppingagent.model.Promotion> promotions = promotionService.getPromotionsForProduct(row.product_id);
+                        var activePromo = promotions.stream()
+                                .filter(promo -> promo.isActive() && promo.getPromoCode() == null)
+                                .findFirst();
+                        if (activePromo.isPresent()) {
+                            unitPrice = com.shoppingagent.util.DiscountCalculator.calculateDiscountedPrice(
+                                    p.price, activePromo.get().getDiscountType(), activePromo.get().getDiscountValue());
+                        }
+                    } catch (Exception e) {
+                        logger.warn("Failed to fetch promotions for product {}, using original price", row.product_id, e);
+                    }
                 }
             }
 
@@ -205,6 +221,65 @@ public class CheckoutService {
         }
         String orderId = created.get(0).id;
 
+        // Insert order_items for each device in the cart
+        String deviceCartJson = supabaseClient.get("cart_items",
+                "select=id,product_id,display_name,unit_price,quantity,item_type"
+                        + "&session_id=eq." + sessionId + "&item_type=neq.broadband_service");
+        List<CartItemRow> deviceCartItems = gson.fromJson(deviceCartJson,
+                new TypeToken<List<CartItemRow>>() {}.getType());
+        if (deviceCartItems != null) {
+            for (CartItemRow item : deviceCartItems) {
+                String productName = item.display_name;
+                double originalPrice = item.unit_price != null ? item.unit_price : 0.0;
+                double effectivePrice = originalPrice;
+                String imageUrl = null;
+                String promotionalLabel = null;
+
+                // Look up product details if not stored on cart item
+                if (item.product_id != null && (productName == null || productName.isBlank())) {
+                    String pJson = supabaseClient.get("products",
+                            "select=name,price,image_url&id=eq." + item.product_id);
+                    List<ProductRow> products = gson.fromJson(pJson,
+                            new TypeToken<List<ProductRow>>() {}.getType());
+                    if (products != null && !products.isEmpty()) {
+                        productName = products.get(0).name;
+                        originalPrice = products.get(0).price;
+                        effectivePrice = originalPrice;
+                        imageUrl = products.get(0).image_url;
+                    }
+                }
+
+                // Apply active auto-promotions
+                if (item.product_id != null) {
+                    try {
+                        List<com.shoppingagent.model.Promotion> promotions = promotionService.getPromotionsForProduct(item.product_id);
+                        var activePromo = promotions.stream()
+                                .filter(promo -> promo.isActive() && promo.getPromoCode() == null)
+                                .findFirst();
+                        if (activePromo.isPresent()) {
+                            com.shoppingagent.model.Promotion promo = activePromo.get();
+                            effectivePrice = com.shoppingagent.util.DiscountCalculator.calculateDiscountedPrice(
+                                    originalPrice, promo.getDiscountType(), promo.getDiscountValue());
+                            promotionalLabel = promo.getPromotionalLabel();
+                        }
+                    } catch (Exception e) {
+                        logger.warn("Failed to fetch promotions for product {}, using original price", item.product_id, e);
+                    }
+                }
+
+                JsonObject itemBody = new JsonObject();
+                itemBody.addProperty("order_id", orderId);
+                itemBody.addProperty("product_id", item.product_id != null ? item.product_id : item.id);
+                itemBody.addProperty("product_name", productName != null ? productName : "Unknown");
+                itemBody.addProperty("price", effectivePrice);
+                itemBody.addProperty("original_price", originalPrice);
+                if (promotionalLabel != null) itemBody.addProperty("promotional_label", promotionalLabel);
+                itemBody.addProperty("quantity", item.quantity);
+                if (imageUrl != null) itemBody.addProperty("image_url", imageUrl);
+                supabaseClient.post("order_items", gson.toJson(itemBody));
+            }
+        }
+
         // Update checkout_sessions: mark device_payment_done, link device_order_id, update status
         JsonObject sessionUpdate = new JsonObject();
         sessionUpdate.addProperty("device_payment_done", true);
@@ -294,6 +369,16 @@ public class CheckoutService {
         }
         String serviceOrderId = createdOrders.get(0).id;
 
+        // Insert order_item for this broadband service
+        JsonObject itemBody = new JsonObject();
+        itemBody.addProperty("order_id", serviceOrderId);
+        itemBody.addProperty("product_id", cartItem.id);
+        itemBody.addProperty("product_name", cartItem.display_name != null ? cartItem.display_name : "Broadband Service");
+        itemBody.addProperty("price", monthlyTotal);
+        itemBody.addProperty("original_price", monthlyTotal);
+        itemBody.addProperty("quantity", 1);
+        supabaseClient.post("order_items", gson.toJson(itemBody));
+
         // Use saved customer_address as install_address, fall back to "TBD"
         String installAddress = "TBD";
         if (session.customer_address != null && !session.customer_address.isBlank()) {
@@ -334,9 +419,14 @@ public class CheckoutService {
                 ? allAppts.stream().map(a -> a.cart_item_id).distinct().count()
                 : 0;
 
-        String newStatus = (broadbandCount > 0 && distinctBookedCount >= broadbandCount)
-                ? "complete"
-                : "appointment_pending";
+        boolean allBooked = broadbandCount > 0 && distinctBookedCount >= broadbandCount;
+        String newStatus = allBooked ? "complete" : "appointment_pending";
+
+        // Clear broadband items from cart once all have appointments booked
+        if (allBooked) {
+            supabaseClient.delete("cart_items",
+                    "session_id=eq." + sessionId + "&item_type=eq.broadband_service");
+        }
 
         JsonObject sessionUpdate = new JsonObject();
         sessionUpdate.addProperty("status", newStatus);
@@ -576,6 +666,7 @@ public class CheckoutService {
         String name;
         double price;
         String description;
+        String image_url;
     }
 
     private static class CustomerDetailsRow {

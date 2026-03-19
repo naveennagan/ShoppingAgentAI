@@ -25,34 +25,48 @@ interface Order {
     orderDate: string;
     shippingAddress: string;
     paymentMethod: string;
+    orderType?: string;
+    serviceStatus?: string;
+    monthlyTotal?: number;
 }
 
-const STATUS_STEPS = ['CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED'];
+const DEVICE_STEPS = ['CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED'];
+const SERVICE_STEPS = ['PENDING', 'APPOINTMENT_BOOKED', 'INSTALLING', 'ACTIVE'];
+const SERVICE_LABELS: Record<string, string> = {
+    'PENDING': 'Pending',
+    'APPOINTMENT_BOOKED': 'Appt. Booked',
+    'INSTALLING': 'Installing',
+    'ACTIVE': 'Active',
+};
 
-function StatusTimeline({ status }: { status: string }) {
-    const current = STATUS_STEPS.indexOf(status.toUpperCase());
+function StatusTimeline({ status, orderType, serviceStatus }: { status: string; orderType?: string; serviceStatus?: string }) {
+    const isService = orderType === 'service';
+    const steps = isService ? SERVICE_STEPS : DEVICE_STEPS;
+    const currentStatus = isService ? (serviceStatus || status).toUpperCase() : status.toUpperCase();
+    const current = steps.indexOf(currentStatus);
     return (
         <div style={{ display: 'flex', alignItems: 'center', gap: 0, margin: '1rem 0' }}>
-            {STATUS_STEPS.map((step, i) => {
+            {steps.map((step, i) => {
                 const done = i <= current;
+                const label = isService ? (SERVICE_LABELS[step] || step) : step.charAt(0) + step.slice(1).toLowerCase();
                 return (
-                    <div key={step} style={{ display: 'flex', alignItems: 'center', flex: i < STATUS_STEPS.length - 1 ? 1 : 'none' }}>
+                    <div key={step} style={{ display: 'flex', alignItems: 'center', flex: i < steps.length - 1 ? 1 : 'none' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}>
                             <div style={{
                                 width: '28px', height: '28px', borderRadius: '50%',
-                                background: done ? 'var(--primary)' : '#e5e7eb',
+                                background: done ? (isService ? '#7c3aed' : 'var(--primary)') : '#e5e7eb',
                                 color: done ? 'white' : '#9ca3af',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 fontSize: '0.75rem', fontWeight: 700, flexShrink: 0
                             }}>
                                 {done ? '✓' : i + 1}
                             </div>
-                            <span style={{ fontSize: '0.65rem', color: done ? 'var(--primary)' : '#9ca3af', fontWeight: done ? 600 : 400, whiteSpace: 'nowrap' }}>
-                                {step.charAt(0) + step.slice(1).toLowerCase()}
+                            <span style={{ fontSize: '0.65rem', color: done ? (isService ? '#7c3aed' : 'var(--primary)') : '#9ca3af', fontWeight: done ? 600 : 400, whiteSpace: 'nowrap' }}>
+                                {label}
                             </span>
                         </div>
-                        {i < STATUS_STEPS.length - 1 && (
-                            <div style={{ flex: 1, height: '2px', background: i < current ? 'var(--primary)' : '#e5e7eb', margin: '0 4px', marginBottom: '18px' }} />
+                        {i < steps.length - 1 && (
+                            <div style={{ flex: 1, height: '2px', background: i < current ? (isService ? '#7c3aed' : 'var(--primary)') : '#e5e7eb', margin: '0 4px', marginBottom: '18px' }} />
                         )}
                     </div>
                 );
@@ -118,15 +132,17 @@ export default function OrdersPage() {
                                 </div>
                                 <span style={{
                                     padding: '0.3rem 0.75rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 600,
-                                    background: order.status === 'DELIVERED' ? '#dcfce7' : '#eff6ff',
-                                    color: order.status === 'DELIVERED' ? '#15803d' : '#1d4ed8'
+                                    background: order.status === 'DELIVERED' ? '#dcfce7'
+                                        : order.orderType === 'service' ? '#f3e8ff' : '#eff6ff',
+                                    color: order.status === 'DELIVERED' ? '#15803d'
+                                        : order.orderType === 'service' ? '#7c3aed' : '#1d4ed8'
                                 }}>
-                                    {order.status}
+                                    {order.orderType === 'service' ? '📡 Broadband' : '📦 Device'} · {order.serviceStatus || order.status}
                                 </span>
                             </div>
 
                             {/* Status timeline */}
-                            <StatusTimeline status={order.status} />
+                            <StatusTimeline status={order.status} orderType={order.orderType} serviceStatus={order.serviceStatus} />
 
                             {/* Items */}
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', margin: '1rem 0' }}>
@@ -135,9 +151,15 @@ export default function OrdersPage() {
                                     const isDiscounted = item.price !== effectiveOriginalPrice;
                                     return (
                                         <div key={i} style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                                            <img src={item.imageUrl} alt={item.productName}
-                                                style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '8px', background: '#f3f4f6', flexShrink: 0 }} />
+                                            <div style={{ width: '60px', height: '60px', borderRadius: '8px', background: '#f3f4f6', flexShrink: 0, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                {item.imageUrl ? (
+                                                    // eslint-disable-next-line @next/next/no-img-element
+                                                    <img src={item.imageUrl} alt={item.productName}
+                                                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                ) : (
+                                                    <span style={{ fontSize: '1.75rem' }}>📡</span>
+                                                )}
+                                            </div>
                                             <div style={{ flex: 1 }}>
                                                 <p style={{ fontWeight: 600, margin: 0 }}>{item.productName}</p>
                                                 <p style={{ color: '#6b7280', fontSize: '0.85rem', margin: '0.1rem 0 0' }}>Qty: {item.quantity}</p>
@@ -158,7 +180,11 @@ export default function OrdersPage() {
                                     <p style={{ margin: 0 }}>{order.shippingAddress}</p>
                                     <p style={{ margin: '0.2rem 0 0' }}>{order.paymentMethod}</p>
                                 </div>
-                                <span style={{ fontWeight: 800, fontSize: '1.1rem' }}>Total: £{order.totalAmount.toFixed(2)}</span>
+                                <span style={{ fontWeight: 800, fontSize: '1.1rem' }}>
+                                    {order.orderType === 'service'
+                                        ? `£${(order.monthlyTotal ?? 0).toFixed(2)}/mo`
+                                        : `Total: £${order.totalAmount.toFixed(2)}`}
+                                </span>
                             </div>
                         </div>
                     ))}
