@@ -15,4 +15,6 @@ public class CouponValidationResult {
     private String discountType;
     private double discountValue;
     private List<String> applicableProductIds;
+    private Integer validTill;
+    private String applicableItemType;
 }

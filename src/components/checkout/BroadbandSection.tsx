@@ -3,7 +3,6 @@
 import { useState, useMemo } from 'react';
 import { CheckoutSession, Appointment } from '@/types/checkout';
 import { CheckCircle, Calendar, X } from 'lucide-react';
-import Link from 'next/link';
 
 interface Props {
   session: CheckoutSession;
@@ -87,17 +86,7 @@ export default function BroadbandSection({ session, appointments, onBook, onCanc
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <Link href="/orders" className="btn btn-primary" style={{ padding: '0.65rem 1.25rem', fontSize: '0.88rem' }}>
-            View Order Details
-          </Link>
-          <Link href="/bills" className="btn" style={{ padding: '0.65rem 1.25rem', fontSize: '0.88rem', border: '1.5px solid var(--primary)', color: 'var(--primary)', background: 'transparent' }}>
-            My Active Bills
-          </Link>
-          <Link href="/products" className="btn" style={{ padding: '0.65rem 1.25rem', fontSize: '0.88rem', border: '1.5px solid #e5e7eb', color: '#6b7280', background: 'transparent' }}>
-            Continue Shopping
-          </Link>
-        </div>
+        
       </div>
     );
   }

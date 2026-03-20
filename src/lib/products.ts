@@ -39,6 +39,8 @@ export interface CouponValidationResult {
     discountType: 'percentage' | 'fixed_amount';
     discountValue: number;
     applicableProductIds: string[];
+    validTill: number | null;
+    applicableItemType: string;
 }
 
 export interface Bundle {

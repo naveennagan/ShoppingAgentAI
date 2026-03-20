@@ -28,4 +28,8 @@ public class Promotion {
     private boolean isActive;
     @SerializedName("created_at")
     private String createdAt;
+    @SerializedName("valid_till")
+    private Integer validTill;
+    @SerializedName("applicable_item_type")
+    private String applicableItemType;
 }

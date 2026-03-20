@@ -110,7 +110,8 @@ public class OrderService {
         logger.info("Order {} created for session {}", orderId, sessionId);
 
         return new Order(orderId, sessionId, orderItems, totalAmount,
-                "CONFIRMED", java.time.LocalDateTime.now(), shippingAddress, paymentMethod);
+                "CONFIRMED", java.time.LocalDateTime.now(), shippingAddress, paymentMethod,
+                null, null, 0.0);
     }
 
     public List<Order> getOrdersBySession(String sessionId) {

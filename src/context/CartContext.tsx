@@ -69,9 +69,22 @@ interface CartContextType {
     finalTotal: number;
     couponDiscount: number;
     count: number;
+    // Legacy single-coupon API (backward compatibility)
     appliedCoupon: CouponValidationResult | null;
     applyCoupon: (code: string) => Promise<void>;
     removeCoupon: () => void;
+    // Split voucher state
+    appliedDeviceVoucher: CouponValidationResult | null;
+    appliedBroadbandVoucher: CouponValidationResult | null;
+    applyDeviceVoucher: (code: string) => Promise<void>;
+    applyBroadbandVoucher: (code: string) => Promise<void>;
+    removeDeviceVoucher: () => void;
+    removeBroadbandVoucher: () => void;
+    // Split totals
+    payTodayTotal: number;
+    payMonthlyTotal: number;
+    deviceDiscount: number;
+    broadbandDiscount: number;
     addBroadbandServiceToCart: (plan: BroadbandPlan, userSelectionId: string, displaySummary?: string) => Promise<void>;
 }
 
@@ -80,7 +93,8 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 export function CartProvider({ children }: { children: ReactNode }) {
     const [items, setItems] = useState<CartItem[]>([]);
     const [isInitialized, setIsInitialized] = useState(false);
-    const [appliedCoupon, setAppliedCoupon] = useState<CouponValidationResult | null>(null);
+    const [appliedDeviceVoucher, setAppliedDeviceVoucher] = useState<CouponValidationResult | null>(null);
+    const [appliedBroadbandVoucher, setAppliedBroadbandVoucher] = useState<CouponValidationResult | null>(null);
     const [itemPromotions, setItemPromotions] = useState<Record<string, CartItemPromotion>>({});
 
     // Fetch promotions for all cart items whenever items change
@@ -223,25 +237,76 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }, 0);
     const count = items.reduce((sum: number, item: CartItem) => sum + item.quantity, 0);
 
-    // Coupon discount applies on top of already-discounted prices (after automatic promotions)
-    const couponDiscount = appliedCoupon
-        ? enrichedItems.reduce((sum, item) => {
-            if (!appliedCoupon.applicableProductIds.includes(item.product.id)) return sum;
+    // Split items into device and broadband categories
+    const deviceItems = enrichedItems.filter(item => item.item_type !== 'broadband_service');
+    const broadbandItems = enrichedItems.filter(item => item.item_type === 'broadband_service');
+
+    // Device discount: apply device voucher to device items
+    const deviceDiscount = appliedDeviceVoucher
+        ? deviceItems.reduce((sum, item) => {
             const effectivePrice = item.promotion ? item.promotion.discountedPrice : item.product.price;
-            const afterCoupon = calculateDiscountedPrice(effectivePrice, appliedCoupon.discountType, appliedCoupon.discountValue);
-            return sum + (effectivePrice - afterCoupon) * item.quantity;
+            const afterVoucher = calculateDiscountedPrice(effectivePrice, appliedDeviceVoucher.discountType, appliedDeviceVoucher.discountValue);
+            return sum + (effectivePrice - afterVoucher) * item.quantity;
         }, 0)
         : 0;
 
+    // Broadband discount: apply broadband voucher to broadband items
+    const broadbandDiscount = appliedBroadbandVoucher
+        ? broadbandItems.reduce((sum, item) => {
+            const effectivePrice = item.promotion ? item.promotion.discountedPrice : item.product.price;
+            const afterVoucher = calculateDiscountedPrice(effectivePrice, appliedBroadbandVoucher.discountType, appliedBroadbandVoucher.discountValue);
+            return sum + (effectivePrice - afterVoucher) * item.quantity;
+        }, 0)
+        : 0;
+
+    // Pay Today = sum of device item prices after device voucher discount
+    const deviceSubtotal = deviceItems.reduce((sum, item) => {
+        const price = item.promotion ? item.promotion.discountedPrice : item.product.price;
+        return sum + price * item.quantity;
+    }, 0);
+    const payTodayTotal = deviceSubtotal - deviceDiscount;
+
+    // Pay Monthly = sum of broadband item prices after broadband voucher discount
+    const broadbandSubtotal = broadbandItems.reduce((sum, item) => {
+        const price = item.promotion ? item.promotion.discountedPrice : item.product.price;
+        return sum + price * item.quantity;
+    }, 0);
+    const payMonthlyTotal = broadbandSubtotal - broadbandDiscount;
+
+    // Backward compatibility: couponDiscount = total of both discounts
+    const couponDiscount = deviceDiscount + broadbandDiscount;
+
     const finalTotal = total - couponDiscount;
 
+    // Backward compatibility: appliedCoupon returns the device voucher (or broadband if no device)
+    const appliedCoupon = appliedDeviceVoucher || appliedBroadbandVoucher;
+
+    const applyDeviceVoucher = async (code: string) => {
+        const productIds = deviceItems.map(i => i.product.id);
+        const result = await apiClient.validateCouponCode(code.trim(), productIds, 'device');
+        setAppliedDeviceVoucher(result);
+    };
+
+    const applyBroadbandVoucher = async (code: string) => {
+        const productIds = broadbandItems.map(i => i.product.id);
+        const result = await apiClient.validateCouponCode(code.trim(), productIds, 'broadband');
+        setAppliedBroadbandVoucher(result);
+    };
+
+    const removeDeviceVoucher = () => setAppliedDeviceVoucher(null);
+    const removeBroadbandVoucher = () => setAppliedBroadbandVoucher(null);
+
+    // Legacy applyCoupon: applies as device voucher for backward compatibility
     const applyCoupon = async (code: string) => {
         const productIds = items.map(i => i.product.id);
         const result = await apiClient.validateCouponCode(code.trim(), productIds);
-        setAppliedCoupon(result);
+        setAppliedDeviceVoucher(result);
     };
 
-    const removeCoupon = () => setAppliedCoupon(null);
+    const removeCoupon = () => {
+        setAppliedDeviceVoucher(null);
+        setAppliedBroadbandVoucher(null);
+    };
 
     const addBroadbandServiceToCart = async (plan: BroadbandPlan, userSelectionId: string, displaySummary?: string) => {
         const summary = displaySummary ?? `${plan.downloadSpeedMbps}Mbps / ${plan.uploadSpeedMbps}Mbps · ${plan.technologyType} · £${plan.monthlyPrice}/mo`;
@@ -289,7 +354,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     };
 
     return (
-        <CartContext.Provider value={{ items: enrichedItems, addToCart, removeFromCart, updateQuantity, clearCart, total, finalTotal, couponDiscount, count, appliedCoupon, applyCoupon, removeCoupon, addBroadbandServiceToCart }}>
+        <CartContext.Provider value={{ items: enrichedItems, addToCart, removeFromCart, updateQuantity, clearCart, total, finalTotal, couponDiscount, count, appliedCoupon, applyCoupon, removeCoupon, appliedDeviceVoucher, appliedBroadbandVoucher, applyDeviceVoucher, applyBroadbandVoucher, removeDeviceVoucher, removeBroadbandVoucher, payTodayTotal, payMonthlyTotal, deviceDiscount, broadbandDiscount, addBroadbandServiceToCart }}>
             {children}
         </CartContext.Provider>
     );

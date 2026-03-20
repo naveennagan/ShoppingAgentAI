@@ -23,11 +23,14 @@ class CheckoutServiceTest {
     @Mock
     private SupabaseClient supabaseClient;
 
+    @Mock
+    private PromotionService promotionService;
+
     private CheckoutService checkoutService;
 
     @BeforeEach
     void setUp() {
-        checkoutService = new CheckoutService(supabaseClient);
+        checkoutService = new CheckoutService(supabaseClient, promotionService);
     }
 
     // -------------------------------------------------------------------------
@@ -271,6 +274,8 @@ class CheckoutServiceTest {
                 .thenReturn("[]");
         when(supabaseClient.post(eq("orders"), anyString()))
                 .thenReturn("[{\"id\":\"order-svc-1\"}]");
+        when(supabaseClient.post(eq("order_items"), anyString()))
+                .thenReturn("[{\"id\":\"oi-1\"}]");
         when(supabaseClient.post(eq("appointments"), anyString()))
                 .thenReturn("[{\"id\":\"apt-new-1\",\"order_id\":\"order-svc-1\",\"status\":\"pending\"}]");
         when(supabaseClient.patch(anyString(), anyString(), anyString())).thenReturn("[]");

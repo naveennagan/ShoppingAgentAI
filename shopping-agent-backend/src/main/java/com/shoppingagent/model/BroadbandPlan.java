@@ -12,8 +12,14 @@ public class BroadbandPlan {
     private String name;
     private int downloadSpeedMbps;
     private int uploadSpeedMbps;
+    private String planType;
     private String technologyType;
     private int contractLengthMonths;
     private double monthlyPrice;
     private String promotionalLabel; // nullable
+    private boolean includesRouter;
+    private String routerName;
+    private int speedGuaranteeMbps;
+    private double activationFee;
+    private double outOfContractPrice;
 }

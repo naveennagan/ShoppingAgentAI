@@ -51,6 +51,9 @@ class BroadbandControllerTest {
     @MockBean
     private BroadbandAiAdvisorService broadbandAiAdvisorService;
 
+    @MockBean
+    private com.shoppingagent.service.BundledProductService bundledProductService;
+
     // --- GET /api/broadband/addresses ---
 
     @Test
@@ -107,7 +110,7 @@ class BroadbandControllerTest {
 
     @Test
     void getProducts_validUprn_returns200WithPlanList() throws Exception {
-        BroadbandPlan plan = new BroadbandPlan("plan-1", "Full Fibre 100", 100, 20, "FTTP", 24, 29.99, "Best Value");
+        BroadbandPlan plan = new BroadbandPlan("plan-1", "Full Fibre 100", 100, 20, null, "FTTP", 24, 29.99, "Best Value", false, null, 0, 0.0, 0.0);
         when(productQualificationService.getPlans("100023456789")).thenReturn(List.of(plan));
 
         String body = objectMapper.writeValueAsString(Map.of("uprn", "100023456789"));
@@ -126,8 +129,8 @@ class BroadbandControllerTest {
 
     @Test
     void recommend_validRequest_returns200WithRecommendation() throws Exception {
-        BroadbandPlan topPlan = new BroadbandPlan("plan-1", "Full Fibre 100", 100, 20, "FTTP", 24, 29.99, null);
-        BroadbandPlan altPlan = new BroadbandPlan("plan-2", "Full Fibre 500", 500, 100, "FTTP", 24, 49.99, null);
+        BroadbandPlan topPlan = new BroadbandPlan("plan-1", "Full Fibre 100", 100, 20, null, "FTTP", 24, 29.99, null, false, null, 0, 0.0, 0.0);
+        BroadbandPlan altPlan = new BroadbandPlan("plan-2", "Full Fibre 500", 500, 100, null, "FTTP", 24, 49.99, null, false, null, 0, 0.0, 0.0);
         BroadbandRecommendation recommendation = new BroadbandRecommendation(
                 topPlan,
                 "Great for everyday browsing and streaming.",

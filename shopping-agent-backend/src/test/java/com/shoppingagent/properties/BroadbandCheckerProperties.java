@@ -56,7 +56,7 @@ class BroadbandCheckerProperties {
 
         return Combinators.combine(ids, names, speeds, speeds, techTypes, contracts, prices)
                 .as((id, name, dl, ul, tech, contract, price) ->
-                        new BroadbandPlan(id, name, dl, ul, tech, contract, price, null));
+                        new BroadbandPlan(id, name, dl, ul, null, tech, contract, price, null, false, null, 0, 0.0, 0.0));
     }
 
     @Provide
@@ -92,7 +92,7 @@ class BroadbandCheckerProperties {
 
         return Combinators.combine(ids, names, speeds, speeds, techTypes, contracts, prices, promos)
                 .as((id, name, dl, ul, tech, contract, price, promo) ->
-                        new BroadbandPlan(id, name, dl, ul, tech, contract, price, promo));
+                        new BroadbandPlan(id, name, dl, ul, null, tech, contract, price, promo, false, null, 0, 0.0, 0.0));
     }
 
     @Provide
@@ -109,7 +109,7 @@ class BroadbandCheckerProperties {
 
         return Combinators.combine(ids, names, speeds, speeds, techTypes, contracts, prices, promos)
                 .as((id, name, dl, ul, tech, contract, price, promo) ->
-                        new BroadbandPlan(id, name, dl, ul, tech, contract, price, promo));
+                        new BroadbandPlan(id, name, dl, ul, null, tech, contract, price, promo, false, null, 0, 0.0, 0.0));
     }
 
     @Provide
@@ -191,7 +191,7 @@ class BroadbandCheckerProperties {
         };
 
         BroadbandController controller = new BroadbandController(
-                neverCalledService, null, null, null);
+                neverCalledService, null, null, null, null);
 
         boolean exceptionThrown = false;
         try {
@@ -536,7 +536,7 @@ class BroadbandCheckerProperties {
         // Stub SupabaseClient that returns a session with has_broadband_service=false
         SupabaseClient stubClient = new NoServiceSessionStub();
 
-        CheckoutService service = new CheckoutService(stubClient);
+        CheckoutService service = new CheckoutService(stubClient, null);
 
         com.shoppingagent.model.AppointmentRequest request =
                 new com.shoppingagent.model.AppointmentRequest(sessionId, "2025-01-01", "morning", null);
@@ -571,7 +571,7 @@ class BroadbandCheckerProperties {
         // Stub SupabaseClient that returns an appointment with the given non-completed status
         SupabaseClient stubClient = new NonCompletedAppointmentStub(status);
 
-        CheckoutService service = new CheckoutService(stubClient);
+        CheckoutService service = new CheckoutService(stubClient, null);
 
         boolean exceptionThrown = false;
         try {

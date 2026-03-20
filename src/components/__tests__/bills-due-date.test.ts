@@ -52,7 +52,7 @@ describe('computeDueDate – Property 9: Due date computation', () => {
      */
     fc.assert(
       fc.property(
-        fc.date({ min: new Date('2020-01-01'), max: new Date('2030-12-31') }),
+        fc.date({ min: new Date('2020-01-01'), max: new Date('2030-12-31'), noInvalidDate: true }),
         (activationDate) => {
           const sub = makeSub({
             status: 'active',
@@ -88,7 +88,7 @@ describe('computeDueDate – Property 9: Due date computation', () => {
      */
     fc.assert(
       fc.property(
-        fc.option(fc.date({ min: new Date('2020-01-01'), max: new Date('2030-12-31') }).map(d => d.toISOString()), { nil: undefined }),
+        fc.option(fc.date({ min: new Date('2020-01-01'), max: new Date('2030-12-31'), noInvalidDate: true }).map(d => d.toISOString()), { nil: undefined }),
         (activatedAt) => {
           const sub = makeSub({ status: 'inactive', activatedAt });
           expect(computeDueDate(sub)).toBe('After installation');
@@ -105,7 +105,7 @@ describe('computeDueDate – Property 9: Due date computation', () => {
      */
     fc.assert(
       fc.property(
-        fc.option(fc.date({ min: new Date('2020-01-01'), max: new Date('2030-12-31') }).map(d => d.toISOString()), { nil: undefined }),
+        fc.option(fc.date({ min: new Date('2020-01-01'), max: new Date('2030-12-31'), noInvalidDate: true }).map(d => d.toISOString()), { nil: undefined }),
         (activatedAt) => {
           const sub = makeSub({ status: 'cancelled', activatedAt });
           expect(computeDueDate(sub)).toBe('After installation');
@@ -125,7 +125,7 @@ describe('computeDueDate – Property 9: Due date computation', () => {
     fc.assert(
       fc.property(
         fc.constantFrom<'active' | 'inactive' | 'cancelled'>('active', 'inactive', 'cancelled'),
-        fc.option(fc.date({ min: new Date('2020-01-01'), max: new Date('2030-12-31') }).map(d => d.toISOString()), { nil: undefined }),
+        fc.option(fc.date({ min: new Date('2020-01-01'), max: new Date('2030-12-31'), noInvalidDate: true }).map(d => d.toISOString()), { nil: undefined }),
         (status, activatedAt) => {
           const sub = makeSub({ status, activatedAt });
           const result = computeDueDate(sub);

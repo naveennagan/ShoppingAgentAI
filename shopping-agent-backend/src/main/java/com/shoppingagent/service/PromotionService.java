@@ -106,8 +106,10 @@ public class PromotionService {
     }
 
 
-    public CouponValidationResult validateCouponCode(String code, List<String> productIds) {
-        logger.debug("Validating coupon code: {}", code);
+    private static final java.util.Set<String> VALID_ITEM_TYPES = java.util.Set.of("device", "broadband", "both");
+
+    public CouponValidationResult validateCouponCode(String code, List<String> productIds, String itemType) {
+        logger.debug("Validating coupon code: {} with itemType: {}", code, itemType);
 
         // Query promotions table for the given promo_code
         String json = supabaseClient.get("promotions", "select=*&promo_code=eq." + code);
@@ -131,19 +133,47 @@ public class PromotionService {
             throw new InvalidCouponException("Coupon code is not currently active", InvalidCouponException.Reason.INACTIVE);
         }
 
+        // Determine effective applicable_item_type (null treated as "both")
+        String effectiveItemType = promotion.getApplicableItemType();
+        if (effectiveItemType == null || effectiveItemType.isBlank()) {
+            effectiveItemType = "both";
+        }
+
+        // Validate applicable_item_type is a known value
+        if (!VALID_ITEM_TYPES.contains(effectiveItemType)) {
+            throw new InvalidCouponException("Promotion has invalid item type configuration", InvalidCouponException.Reason.INVALID_CONFIG);
+        }
+
+        // When itemType is provided, check that the promotion is applicable
+        if (itemType != null && !itemType.isBlank()) {
+            if (!effectiveItemType.equals("both") && !effectiveItemType.equals(itemType)) {
+                String targetLabel = "device".equals(itemType) ? "device" : "broadband";
+                throw new InvalidCouponException(
+                        "This voucher is not applicable to " + targetLabel + " items",
+                        InvalidCouponException.Reason.WRONG_ITEM_TYPE);
+            }
+        }
+
         // Find intersection of submitted productIds with products linked to this promotion
         List<String> applicableProductIds = new ArrayList<>();
         if (productIds != null && !productIds.isEmpty()) {
-            String promotionId = promotion.getId();
-            String ppJson = supabaseClient.get("product_promotions",
-                    "select=product_id&promotion_id=eq." + promotionId + "&product_id=in.(" +
-                    productIds.stream().collect(Collectors.joining(",")) + ")");
-            List<ProductPromotionIdRow> rows = gson.fromJson(ppJson,
-                    new TypeToken<List<ProductPromotionIdRow>>() {}.getType());
-            if (rows != null) {
-                applicableProductIds = rows.stream()
-                        .map(r -> r.product_id)
-                        .collect(Collectors.toList());
+            // For broadband items, skip product_promotions lookup — broadband promotions
+            // apply by item type, not by product-level mapping. Broadband product IDs
+            // (e.g. "broadband-<planId>") don't exist in the product_promotions table.
+            if ("broadband".equals(itemType)) {
+                applicableProductIds = new ArrayList<>(productIds);
+            } else {
+                String promotionId = promotion.getId();
+                String ppJson = supabaseClient.get("product_promotions",
+                        "select=product_id&promotion_id=eq." + promotionId + "&product_id=in.(" +
+                        productIds.stream().collect(Collectors.joining(",")) + ")");
+                List<ProductPromotionIdRow> rows = gson.fromJson(ppJson,
+                        new TypeToken<List<ProductPromotionIdRow>>() {}.getType());
+                if (rows != null) {
+                    applicableProductIds = rows.stream()
+                            .map(r -> r.product_id)
+                            .collect(Collectors.toList());
+                }
             }
         }
 
@@ -152,7 +182,9 @@ public class PromotionService {
                 promotion.getName(),
                 promotion.getDiscountType(),
                 promotion.getDiscountValue(),
-                applicableProductIds
+                applicableProductIds,
+                promotion.getValidTill(),
+                effectiveItemType
         );
     }
 

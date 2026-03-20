@@ -6,6 +6,7 @@ import com.shoppingagent.model.BroadbandPlan;
 import com.shoppingagent.model.BroadbandRecommendation;
 import com.shoppingagent.service.AddressLookupService;
 import com.shoppingagent.service.BroadbandAiAdvisorService;
+import com.shoppingagent.service.BundledProductService;
 import com.shoppingagent.service.EligibilityService;
 import com.shoppingagent.service.ProductQualificationService;
 import org.slf4j.Logger;
@@ -29,15 +30,18 @@ public class BroadbandController {
     private final EligibilityService eligibilityService;
     private final ProductQualificationService productQualificationService;
     private final BroadbandAiAdvisorService broadbandAiAdvisorService;
+    private final BundledProductService bundledProductService;
 
     public BroadbandController(AddressLookupService addressLookupService,
                                 EligibilityService eligibilityService,
                                 ProductQualificationService productQualificationService,
-                                BroadbandAiAdvisorService broadbandAiAdvisorService) {
+                                BroadbandAiAdvisorService broadbandAiAdvisorService,
+                                BundledProductService bundledProductService) {
         this.addressLookupService = addressLookupService;
         this.eligibilityService = eligibilityService;
         this.productQualificationService = productQualificationService;
         this.broadbandAiAdvisorService = broadbandAiAdvisorService;
+        this.bundledProductService = bundledProductService;
     }
 
     @GetMapping("/addresses")
@@ -67,10 +71,32 @@ public class BroadbandController {
     }
 
     @GetMapping("/addons")
-    public ResponseEntity<List<Map<String, Object>>> getAddons() {
-        logger.info("GET /api/broadband/addons");
-        List<Map<String, Object>> addons = productQualificationService.getAddons();
+    public ResponseEntity<?> getAddons(@RequestParam(required = false) String planType) {
+        logger.info("GET /api/broadband/addons planType={}", planType);
+        if (planType != null && !List.of("Core", "Standard", "Premium", "Ultimate").contains(planType)) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Invalid planType. Must be Core, Standard, Premium, or Ultimate."));
+        }
+        List<Map<String, Object>> addons = productQualificationService.getAddons(planType);
         return ResponseEntity.ok(addons);
+    }
+
+    @GetMapping("/tv-packages")
+    public ResponseEntity<List<Map<String, Object>>> getTvPackages() {
+        logger.info("GET /api/broadband/tv-packages");
+        return ResponseEntity.ok(bundledProductService.getTvPackages());
+    }
+
+    @GetMapping("/sim-plans")
+    public ResponseEntity<List<Map<String, Object>>> getSimPlans() {
+        logger.info("GET /api/broadband/sim-plans");
+        return ResponseEntity.ok(bundledProductService.getSimPlans());
+    }
+
+    @GetMapping("/home-phone-services")
+    public ResponseEntity<List<Map<String, Object>>> getHomePhoneServices() {
+        logger.info("GET /api/broadband/home-phone-services");
+        return ResponseEntity.ok(bundledProductService.getHomePhoneServices());
     }
 
     @PostMapping("/recommend")

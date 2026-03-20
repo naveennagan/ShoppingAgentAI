@@ -8,7 +8,8 @@ import { CheckoutSession, Appointment } from '@/types/checkout';
 import CancelModal from '@/components/checkout/CancelModal';
 import DevicePaymentSection from '@/components/checkout/DevicePaymentSection';
 import BroadbandSection from '@/components/checkout/BroadbandSection';
-import { CheckCircle, X } from 'lucide-react';
+import { CheckCircle } from 'lucide-react';
+import Link from 'next/link';
 
 interface AboutYou {
   fullName: string;
@@ -219,10 +220,50 @@ export default function CheckoutPage() {
 
   return (
     <main className="container" style={{ padding: '2rem 0', maxWidth: '900px', margin: '0 auto' }}>
-      <h1 style={{ fontSize: '2rem', fontWeight: 800, marginBottom: '0.25rem' }}>Checkout</h1>
-      <p style={{ color: '#6b7280', marginBottom: '2rem', fontSize: '0.9rem' }}>
-        {step === 'about' ? 'Tell us about yourself to continue.' : 'Complete your payment below.'}
-      </p>
+      <h1 style={{ fontSize: '2rem', fontWeight: 800, marginBottom: '1.25rem' }}>Checkout</h1>
+
+      {/* Step indicator */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0', marginBottom: '2rem' }}>
+        {/* Step 1 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={{
+            width: '32px', height: '32px', borderRadius: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '0.85rem', fontWeight: 700,
+            background: step === 'about' ? '#2563eb' : '#16a34a',
+            color: '#fff',
+          }}>
+            {step === 'payment' ? '✓' : '1'}
+          </div>
+          <span style={{
+            fontSize: '0.9rem', fontWeight: step === 'about' ? 700 : 500,
+            color: step === 'about' ? '#111827' : '#16a34a',
+          }}>About You</span>
+        </div>
+
+        {/* Connector */}
+        <div style={{
+          flex: '0 0 60px', height: '2px', margin: '0 0.5rem',
+          background: step === 'payment' ? '#16a34a' : '#d1d5db',
+        }} />
+
+        {/* Step 2 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={{
+            width: '32px', height: '32px', borderRadius: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '0.85rem', fontWeight: 700,
+            background: step === 'payment' ? '#2563eb' : '#e5e7eb',
+            color: step === 'payment' ? '#fff' : '#9ca3af',
+          }}>
+            2
+          </div>
+          <span style={{
+            fontSize: '0.9rem', fontWeight: step === 'payment' ? 700 : 500,
+            color: step === 'payment' ? '#111827' : '#9ca3af',
+          }}>Payment</span>
+        </div>
+      </div>
 
       {/* Step 1: About You */}
       {step === 'about' && (
@@ -257,12 +298,11 @@ export default function CheckoutPage() {
             </div>
           )}
 
-          {/* Two-column payment layout */}
+          {/* Stacked payment layout */}
           <div style={{
-            display: 'grid',
-            gridTemplateColumns: session.hasDevices && session.hasBroadbandService ? '1fr 1fr' : '1fr',
+            display: 'flex',
+            flexDirection: 'column',
             gap: '1.5rem',
-            alignItems: 'start',
           }}>
             {session.hasDevices && (
               <DevicePaymentSection
@@ -281,6 +321,34 @@ export default function CheckoutPage() {
               />
             )}
           </div>
+
+          {/* Common actions — shown when everything is complete */}
+          {(() => {
+            const devDone = !session.hasDevices || devicePaid;
+            const bbDone = !session.hasBroadbandService || (
+              session.serviceItems.length > 0 &&
+              session.serviceItems.every(item =>
+                session.broadbandBookingStatus[item.cartItemId] &&
+                session.broadbandBookingStatus[item.cartItemId] !== 'unbooked'
+              )
+            );
+            if (devDone && bbDone) {
+              return (
+                <div style={{ marginTop: '2rem', padding: '1.25rem', background: '#f9fafb', border: '1px solid var(--border)', borderRadius: '12px', display: 'flex', gap: '0.75rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                  <Link href="/orders" className="btn btn-primary" style={{ padding: '0.7rem 1.5rem', fontSize: '0.9rem' }}>
+                    View Order Details
+                  </Link>
+                  <Link href="/bills" className="btn" style={{ padding: '0.7rem 1.5rem', fontSize: '0.9rem', border: '1.5px solid var(--primary)', color: 'var(--primary)', background: 'transparent' }}>
+                    My Active Bills
+                  </Link>
+                  <Link href="/products" className="btn" style={{ padding: '0.7rem 1.5rem', fontSize: '0.9rem', border: '1.5px solid #e5e7eb', color: '#6b7280', background: 'transparent' }}>
+                    Continue Shopping
+                  </Link>
+                </div>
+              );
+            }
+            return null;
+          })()}
         </div>
       )}
 

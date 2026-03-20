@@ -70,17 +70,19 @@ export default function DevicePaymentSection({ session, devicePaid, onPay, onCan
       <p style={{ color: '#6b7280', fontSize: '0.85rem', marginBottom: '1.25rem' }}>Mock payment — no real card processing.</p>
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-          <label style={{ fontWeight: 500, fontSize: '0.88rem' }}>Cardholder Name</label>
-          <input required value={cardholderName} onChange={e => setCardholderName(e.target.value)}
-            placeholder="e.g. Jane Smith"
-            style={{ padding: '0.7rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', fontSize: '0.9rem' }} />
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-          <label style={{ fontWeight: 500, fontSize: '0.88rem' }}>Last 4 digits of card</label>
-          <input required value={last4} onChange={e => setLast4(e.target.value.replace(/\D/g, '').slice(0, 4))}
-            placeholder="4242" maxLength={4} inputMode="numeric"
-            style={{ padding: '0.7rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', fontSize: '0.9rem', width: '110px' }} />
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', flex: 1 }}>
+            <label style={{ fontWeight: 500, fontSize: '0.88rem' }}>Cardholder Name</label>
+            <input required value={cardholderName} onChange={e => setCardholderName(e.target.value)}
+              placeholder="e.g. Jane Smith"
+              style={{ padding: '0.7rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', fontSize: '0.9rem' }} />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', flex: '0 0 130px' }}>
+            <label style={{ fontWeight: 500, fontSize: '0.88rem' }}>Last 4 digits</label>
+            <input required value={last4} onChange={e => setLast4(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              placeholder="4242" maxLength={4} inputMode="numeric"
+              style={{ padding: '0.7rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', fontSize: '0.9rem' }} />
+          </div>
         </div>
         {error && <p role="alert" style={{ color: '#ef4444', fontSize: '0.85rem' }}>{error}</p>}
         <div style={{ padding: '0.85rem 1rem', background: '#f3f4f6', borderRadius: '8px', display: 'flex', justifyContent: 'space-between' }}>

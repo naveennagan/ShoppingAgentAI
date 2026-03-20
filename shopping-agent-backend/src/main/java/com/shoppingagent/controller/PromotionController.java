@@ -72,7 +72,7 @@ public class PromotionController {
     public ResponseEntity<?> validateCouponCode(@RequestBody CouponValidationRequest request) {
         logger.info("POST /api/promotions/validate-code - Validating coupon code: {}", request.getCode());
         try {
-            var result = promotionService.validateCouponCode(request.getCode(), request.getProductIds());
+            var result = promotionService.validateCouponCode(request.getCode(), request.getProductIds(), request.getItemType());
             return ResponseEntity.ok(result);
         } catch (InvalidCouponException e) {
             logger.warn("Coupon validation failed: {}", e.getMessage());

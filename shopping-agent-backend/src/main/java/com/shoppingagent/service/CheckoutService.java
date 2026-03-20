@@ -130,8 +130,9 @@ public class CheckoutService {
             supabaseClient.post("checkout_sessions", gson.toJson(body));
         } else {
             CheckoutSessionStateRow state = existingState.get(0);
-            // Only carry forward device_payment_done if devices are still in the cart
-            devicePaymentDone = state.device_payment_done && hasDevices;
+            // After device payment, paid items are removed from cart. So if device_payment_done
+            // is true but new device items exist in the cart, they are unpaid — reset the flag.
+            devicePaymentDone = state.device_payment_done && !hasDevices;
             // Only carry forward appointment_booked if broadband is still in the cart
             appointmentBooked = state.appointment_booked && hasBroadband;
 

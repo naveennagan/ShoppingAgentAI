@@ -25,6 +25,11 @@ class ProductQualificationServiceTest {
     @InjectMocks
     private ProductQualificationService service;
 
+    // JSON for address with FTTP technology
+    private static final String ADDRESS_FTTP_JSON = """
+            [{"technology_copper":false,"technology_fttp":true,"technology_sogea":false}]
+            """;
+
     // JSON uses "plan_ref" — the real Supabase column name
     private static final String TWO_PLANS_JSON = """
             [
@@ -37,7 +42,8 @@ class ProductQualificationServiceTest {
 
     @Test
     void getPlans_twoActivePlans_returnsBothWithAllFieldsMapped() {
-        when(supabaseClient.get(anyString(), anyString())).thenReturn(TWO_PLANS_JSON);
+        when(supabaseClient.get(eq("addresses"), anyString())).thenReturn(ADDRESS_FTTP_JSON);
+        when(supabaseClient.get(eq("broadband_plans"), anyString())).thenReturn(TWO_PLANS_JSON);
 
         List<BroadbandPlan> plans = service.getPlans("uprn-123");
 
@@ -64,7 +70,8 @@ class ProductQualificationServiceTest {
 
     @Test
     void getPlans_emptyArray_returnsEmptyList() {
-        when(supabaseClient.get(anyString(), anyString())).thenReturn("[]");
+        when(supabaseClient.get(eq("addresses"), anyString())).thenReturn(ADDRESS_FTTP_JSON);
+        when(supabaseClient.get(eq("broadband_plans"), anyString())).thenReturn("[]");
 
         List<BroadbandPlan> plans = service.getPlans("uprn-123");
 
@@ -73,7 +80,8 @@ class ProductQualificationServiceTest {
 
     @Test
     void getPlans_queryAlwaysIncludesIsActiveFilter() {
-        when(supabaseClient.get(anyString(), anyString())).thenReturn("[]");
+        when(supabaseClient.get(eq("addresses"), anyString())).thenReturn(ADDRESS_FTTP_JSON);
+        when(supabaseClient.get(eq("broadband_plans"), anyString())).thenReturn("[]");
 
         service.getPlans("uprn-123");
 
@@ -84,7 +92,8 @@ class ProductQualificationServiceTest {
 
     @Test
     void getPlans_querySelectsPlanRef() {
-        when(supabaseClient.get(anyString(), anyString())).thenReturn("[]");
+        when(supabaseClient.get(eq("addresses"), anyString())).thenReturn(ADDRESS_FTTP_JSON);
+        when(supabaseClient.get(eq("broadband_plans"), anyString())).thenReturn("[]");
 
         service.getPlans("uprn-123");
 
@@ -99,7 +108,8 @@ class ProductQualificationServiceTest {
                 [{"plan_ref":"plan-2","name":"Full Fibre 500","download_speed_mbps":500,"upload_speed_mbps":100,
                   "technology_type":"FTTP","contract_length_months":24,"monthly_price":49.99,"promotional_label":null}]
                 """;
-        when(supabaseClient.get(anyString(), anyString())).thenReturn(json);
+        when(supabaseClient.get(eq("addresses"), anyString())).thenReturn(ADDRESS_FTTP_JSON);
+        when(supabaseClient.get(eq("broadband_plans"), anyString())).thenReturn(json);
 
         List<BroadbandPlan> plans = service.getPlans("uprn-123");
 

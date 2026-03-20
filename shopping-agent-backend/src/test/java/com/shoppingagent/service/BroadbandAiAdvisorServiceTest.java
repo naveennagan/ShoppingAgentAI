@@ -81,9 +81,9 @@ class BroadbandAiAdvisorServiceTest {
 
     private List<BroadbandPlan> samplePlans() {
         return List.of(
-                new BroadbandPlan("plan-1", "Full Fibre 100", 100, 20, "FTTP", 24, 29.99, "Best Value"),
-                new BroadbandPlan("plan-2", "Full Fibre 500", 500, 100, "FTTP", 24, 49.99, null),
-                new BroadbandPlan("plan-3", "Essential Broadband", 36, 10, "FTTC", 12, 19.99, null)
+                new BroadbandPlan("plan-1", "Full Fibre 100", 100, 20, null, "FTTP", 24, 29.99, "Best Value", false, null, 0, 0.0, 0.0),
+                new BroadbandPlan("plan-2", "Full Fibre 500", 500, 100, null, "FTTP", 24, 49.99, null, false, null, 0, 0.0, 0.0),
+                new BroadbandPlan("plan-3", "Essential Broadband", 36, 10, null, "FTTC", 12, 19.99, null, false, null, 0, 0.0, 0.0)
         );
     }
 
@@ -143,7 +143,7 @@ class BroadbandAiAdvisorServiceTest {
     void buildBroadbandPrompt_withPromoLabel_includesPromoInPrompt() throws Exception {
         BroadbandAiAdvisorService service = servicePointingAt("http://localhost:" + serverPort);
         List<BroadbandPlan> plans = List.of(
-                new BroadbandPlan("plan-1", "Full Fibre 100", 100, 20, "FTTP", 24, 29.99, "6 months half price")
+                new BroadbandPlan("plan-1", "Full Fibre 100", 100, 20, null, "FTTP", 24, 29.99, "6 months half price", false, null, 0, 0.0, 0.0)
         );
 
         String prompt = service.buildBroadbandPrompt(plans, "casual browsing");
@@ -156,7 +156,7 @@ class BroadbandAiAdvisorServiceTest {
     void buildBroadbandPrompt_withoutPromoLabel_doesNotIncludePromoSegment() throws Exception {
         BroadbandAiAdvisorService service = servicePointingAt("http://localhost:" + serverPort);
         List<BroadbandPlan> plans = List.of(
-                new BroadbandPlan("plan-2", "Full Fibre 500", 500, 100, "FTTP", 24, 49.99, null)
+                new BroadbandPlan("plan-2", "Full Fibre 500", 500, 100, null, "FTTP", 24, 49.99, null, false, null, 0, 0.0, 0.0)
         );
 
         String prompt = service.buildBroadbandPrompt(plans, "gaming");
@@ -169,7 +169,7 @@ class BroadbandAiAdvisorServiceTest {
     void buildBroadbandPrompt_containsPlanIdAndPriceAndTechType() throws Exception {
         BroadbandAiAdvisorService service = servicePointingAt("http://localhost:" + serverPort);
         List<BroadbandPlan> plans = List.of(
-                new BroadbandPlan("plan-abc", "Fibre Max", 900, 200, "FTTP", 18, 59.99, null)
+                new BroadbandPlan("plan-abc", "Fibre Max", 900, 200, null, "FTTP", 18, 59.99, null, false, null, 0, 0.0, 0.0)
         );
 
         String prompt = service.buildBroadbandPrompt(plans, "heavy usage");
@@ -226,7 +226,7 @@ class BroadbandAiAdvisorServiceTest {
 
     @Test
     void recommend_whenGeminiReturns200WithValidJson_returnsRecommendation() throws Exception {
-        BroadbandPlan topPlan = new BroadbandPlan("plan-1", "Full Fibre 100", 100, 20, "FTTP", 24, 29.99, "Best Value");
+        BroadbandPlan topPlan = new BroadbandPlan("plan-1", "Full Fibre 100", 100, 20, null, "FTTP", 24, 29.99, "Best Value", false, null, 0, 0.0, 0.0);
 
         // Build the inner recommendation JSON
         JsonObject topPlanJson = new JsonObject();

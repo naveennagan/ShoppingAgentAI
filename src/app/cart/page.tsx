@@ -1,57 +1,13 @@
 'use client';
 
-import { useState } from 'react';
 import { useCart } from '@/context/CartContext';
 import Link from 'next/link';
-import { calculateDiscountedPrice } from '@/lib/discountCalculator';
 import PriceDisplay from '@/components/ui/PriceDisplay';
+import SplitVoucherInput from '@/components/cart/SplitVoucherInput';
+import SplitOrderSummary from '@/components/cart/SplitOrderSummary';
 
 export default function CartPage() {
-    const { items, removeFromCart, updateQuantity, total, clearCart, appliedCoupon, applyCoupon, removeCoupon } = useCart();
-
-    const [couponCode, setCouponCode] = useState('');
-    const [couponError, setCouponError] = useState('');
-    const [isValidating, setIsValidating] = useState(false);
-
-    const subtotal = items.reduce((sum, { product, quantity, promotion }) => {
-        const effectivePrice = promotion ? promotion.discountedPrice : product.price;
-        return sum + effectivePrice * quantity;
-    }, 0);
-
-    const discountAmount = appliedCoupon
-        ? items.reduce((sum, { product, quantity, promotion }) => {
-            if (!appliedCoupon.applicableProductIds.includes(product.id)) return sum;
-            const effectivePrice = promotion ? promotion.discountedPrice : product.price;
-            const afterCoupon = calculateDiscountedPrice(effectivePrice, appliedCoupon.discountType, appliedCoupon.discountValue);
-            return sum + (effectivePrice - afterCoupon) * quantity;
-        }, 0)
-        : 0;
-
-    const finalTotal = subtotal - discountAmount;
-
-    const noEligibleItems = appliedCoupon !== null && appliedCoupon.applicableProductIds.length === 0;
-
-    async function handleApplyCoupon() {
-        if (!couponCode.trim()) {
-            setCouponError('Please enter a coupon code.');
-            return;
-        }
-        setCouponError('');
-        setIsValidating(true);
-        try {
-            await applyCoupon(couponCode.trim());
-            setCouponCode('');
-        } catch (err: unknown) {
-            setCouponError(err instanceof Error ? err.message : 'Failed to validate coupon code');
-        } finally {
-            setIsValidating(false);
-        }
-    }
-
-    function handleRemoveCoupon() {
-        removeCoupon();
-        setCouponError('');
-    }
+    const { items, removeFromCart, updateQuantity, clearCart } = useCart();
 
     if (items.length === 0) {
         return (
@@ -72,7 +28,11 @@ export default function CartPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '2rem', alignItems: 'start' }}>
                 {/* Cart Items */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    {items.map(({ product, quantity, promotion }) => (
+                    {items.map((item) => {
+                        const { product, quantity, promotion, item_type, display_name, display_summary, unit_price } = item;
+                        const isBroadband = item_type === 'broadband_service';
+
+                        return (
                         <div key={product.id} className="card" style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                             <div style={{ width: '100px', height: '100px', background: 'var(--surface-hover)', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                 {product.image ? (
@@ -84,45 +44,69 @@ export default function CartPage() {
                                     />
                                 ) : (
                                     <span style={{ fontSize: '2.5rem' }}>
-                                        {product.category === 'broadband' ? '📡' : '📦'}
+                                        {isBroadband ? '📡' : '📦'}
                                     </span>
                                 )}
                             </div>
 
                             <div style={{ flex: 1 }}>
-                                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: '0 0 0.25rem' }}>{product.name}</h3>
-                                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>{product.category}</p>
+                                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: '0 0 0.25rem' }}>
+                                    {display_name || product.name}
+                                </h3>
+                                {isBroadband && display_summary ? (
+                                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', lineHeight: 1.4 }}>
+                                        {display_summary}
+                                    </p>
+                                ) : (
+                                    <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>{product.category}</p>
+                                )}
+                                {isBroadband && (
+                                    <span style={{ display: 'inline-block', marginTop: '0.35rem', fontSize: '0.75rem', fontWeight: 600, color: '#0369a1', background: '#e0f2fe', padding: '0.15rem 0.5rem', borderRadius: '4px' }}>
+                                        Monthly service
+                                    </span>
+                                )}
                             </div>
 
                             <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
-                                <PriceDisplay
-                                    originalPrice={product.price * quantity}
-                                    discountedPrice={promotion ? promotion.discountedPrice * quantity : null}
-                                    promotionalLabel={promotion?.promotionalLabel}
-                                />
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--surface-hover)', borderRadius: '8px', padding: '0.25rem' }}>
-                                    <button
-                                        onClick={() => updateQuantity(product.id, quantity - 1)}
-                                        style={{
-                                            width: '28px', height: '28px', display: 'flex', alignItems: 'center',
-                                            justifyContent: 'center', borderRadius: '6px', background: 'var(--surface)',
-                                            border: '1px solid var(--border)', color: 'var(--foreground)',
-                                            boxShadow: 'var(--shadow-sm)', fontWeight: 'bold'
-                                        }}
-                                        aria-label="Decrease quantity"
-                                    >-</button>
-                                    <span style={{ fontSize: '0.9rem', width: '20px', textAlign: 'center', fontWeight: 600 }}>{quantity}</span>
-                                    <button
-                                        onClick={() => updateQuantity(product.id, quantity + 1)}
-                                        style={{
-                                            width: '28px', height: '28px', display: 'flex', alignItems: 'center',
-                                            justifyContent: 'center', borderRadius: '6px', background: 'var(--surface)',
-                                            border: '1px solid var(--border)', color: 'var(--foreground)',
-                                            boxShadow: 'var(--shadow-sm)', fontWeight: 'bold'
-                                        }}
-                                        aria-label="Increase quantity"
-                                    >+</button>
-                                </div>
+                                {isBroadband ? (
+                                    <div>
+                                        <span style={{ fontWeight: 700, fontSize: '1.1rem' }}>
+                                            £{(unit_price ?? product.price).toFixed(2)}
+                                        </span>
+                                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>/mo</span>
+                                    </div>
+                                ) : (
+                                    <PriceDisplay
+                                        originalPrice={product.price * quantity}
+                                        discountedPrice={promotion ? promotion.discountedPrice * quantity : null}
+                                        promotionalLabel={promotion?.promotionalLabel}
+                                    />
+                                )}
+                                {!isBroadband && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--surface-hover)', borderRadius: '8px', padding: '0.25rem' }}>
+                                        <button
+                                            onClick={() => updateQuantity(product.id, quantity - 1)}
+                                            style={{
+                                                width: '28px', height: '28px', display: 'flex', alignItems: 'center',
+                                                justifyContent: 'center', borderRadius: '6px', background: 'var(--surface)',
+                                                border: '1px solid var(--border)', color: 'var(--foreground)',
+                                                boxShadow: 'var(--shadow-sm)', fontWeight: 'bold'
+                                            }}
+                                            aria-label="Decrease quantity"
+                                        >-</button>
+                                        <span style={{ fontSize: '0.9rem', width: '20px', textAlign: 'center', fontWeight: 600 }}>{quantity}</span>
+                                        <button
+                                            onClick={() => updateQuantity(product.id, quantity + 1)}
+                                            style={{
+                                                width: '28px', height: '28px', display: 'flex', alignItems: 'center',
+                                                justifyContent: 'center', borderRadius: '6px', background: 'var(--surface)',
+                                                border: '1px solid var(--border)', color: 'var(--foreground)',
+                                                boxShadow: 'var(--shadow-sm)', fontWeight: 'bold'
+                                            }}
+                                            aria-label="Increase quantity"
+                                        >+</button>
+                                    </div>
+                                )}
                                 <button
                                     onClick={() => removeFromCart(product.id)}
                                     className="btn"
@@ -136,7 +120,8 @@ export default function CartPage() {
                                 </button>
                             </div>
                         </div>
-                    ))}
+                        );
+                    })}
 
                     <button
                         onClick={clearCart}
@@ -151,101 +136,10 @@ export default function CartPage() {
                     </button>
                 </div>
 
-                {/* Order Summary */}
-                <div className="card" style={{ position: 'sticky', top: '5rem' }}>
-                    <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.5rem' }}>Order Summary</h2>
-
-                    {/* Coupon Input */}
-                    {!appliedCoupon ? (
-                        <div style={{ marginBottom: '1.25rem' }}>
-                            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                <input
-                                    type="text"
-                                    value={couponCode}
-                                    onChange={e => { setCouponCode(e.target.value); setCouponError(''); }}
-                                    onKeyDown={e => e.key === 'Enter' && handleApplyCoupon()}
-                                    placeholder="Coupon code"
-                                    aria-label="Coupon code"
-                                    style={{
-                                        flex: 1, padding: '0.5rem 0.75rem', border: '1px solid var(--border)',
-                                        borderRadius: '8px', fontSize: '0.9rem', background: 'var(--surface)',
-                                        color: 'var(--foreground)', outline: 'none'
-                                    }}
-                                />
-                                <button
-                                    onClick={handleApplyCoupon}
-                                    disabled={isValidating}
-                                    className="btn btn-primary"
-                                    style={{ padding: '0.5rem 1rem', fontSize: '0.9rem', whiteSpace: 'nowrap' }}
-                                >
-                                    {isValidating ? 'Applying…' : 'Apply'}
-                                </button>
-                            </div>
-                            {couponError && (
-                                <p style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '0.4rem' }} role="alert">
-                                    {couponError}
-                                </p>
-                            )}
-                        </div>
-                    ) : (
-                        <div style={{
-                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                            background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px',
-                            padding: '0.6rem 0.75rem', marginBottom: '1.25rem'
-                        }}>
-                            <span style={{ color: '#15803d', fontSize: '0.9rem', fontWeight: 600 }}>
-                                ✓ {appliedCoupon.promotionName}
-                            </span>
-                            <button
-                                onClick={handleRemoveCoupon}
-                                style={{
-                                    background: 'none', border: 'none', color: '#6b7280',
-                                    fontSize: '0.8rem', cursor: 'pointer', padding: '0 0.25rem'
-                                }}
-                                aria-label="Remove coupon"
-                            >
-                                Remove
-                            </button>
-                        </div>
-                    )}
-
-                    {/* Subtotal */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem', color: '#4b5563' }}>
-                        <span>Subtotal</span>
-                        <span>£{subtotal.toFixed(2)}</span>
-                    </div>
-
-                    {/* Discount line */}
-                    {appliedCoupon && (
-                        <div style={{ marginBottom: '0.75rem' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#15803d' }}>
-                                <span style={{ fontSize: '0.9rem' }}>{appliedCoupon.promotionName}</span>
-                                <span>-£{discountAmount.toFixed(2)}</span>
-                            </div>
-                            {noEligibleItems && (
-                                <p style={{ color: '#6b7280', fontSize: '0.8rem', marginTop: '0.3rem' }}>
-                                    No items in your cart are eligible for this promotion.
-                                </p>
-                            )}
-                        </div>
-                    )}
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', color: '#4b5563' }}>
-                        <span>Shipping</span>
-                        <span>Free</span>
-                    </div>
-
-                    <div style={{
-                        borderTop: '1px solid var(--border)', paddingTop: '1rem', marginTop: '0.25rem',
-                        display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: '1.25rem'
-                    }}>
-                        <span>Total</span>
-                        <span>£{finalTotal.toFixed(2)}</span>
-                    </div>
-
-                    <Link href="/checkout" className="btn btn-primary" style={{ width: '100%', marginTop: '2rem', textAlign: 'center' }}>
-                        Proceed to Checkout
-                    </Link>
+                {/* Voucher Inputs & Order Summary */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <SplitVoucherInput />
+                    <SplitOrderSummary />
                 </div>
             </div>
         </main>

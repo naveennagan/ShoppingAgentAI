@@ -1,4 +1,4 @@
-import type { BroadbandAddress, BroadbandAddon, BroadbandPlan } from '@/types/broadband';
+import type { BroadbandAddress, BroadbandAddon, BroadbandPlan, TvPackage, SimPlan, HomePhoneService, UserSelectionPayload } from '@/types/broadband';
 import type { Appointment, AppointmentRequest, CheckoutSession, CustomerDetails, Subscription } from '@/types/checkout';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
@@ -135,10 +135,38 @@ export const apiClient = {
     return res.json();
   },
 
-  async getAddons(): Promise<BroadbandAddon[]> {
-    const res = await fetch(`${API_URL}/api/broadband/addons`);
+  async getAddons(planType?: string): Promise<BroadbandAddon[]> {
+    const params = planType ? `?planType=${encodeURIComponent(planType)}` : '';
+    const res = await fetch(`${API_URL}/api/broadband/addons${params}`);
     if (!res.ok) return [];
     return res.json();
+  },
+
+  async getTvPackages(): Promise<TvPackage[]> {
+    const res = await fetch(`${API_URL}/api/broadband/tv-packages`);
+    if (!res.ok) throw new Error('Failed to fetch TV packages');
+    return res.json();
+  },
+
+  async getSimPlans(): Promise<SimPlan[]> {
+    const res = await fetch(`${API_URL}/api/broadband/sim-plans`);
+    if (!res.ok) throw new Error('Failed to fetch SIM plans');
+    return res.json();
+  },
+
+  async getHomePhoneServices(): Promise<HomePhoneService[]> {
+    const res = await fetch(`${API_URL}/api/broadband/home-phone-services`);
+    if (!res.ok) throw new Error('Failed to fetch home phone services');
+    return res.json();
+  },
+
+  async submitUserSelection(selection: UserSelectionPayload): Promise<void> {
+    const res = await fetch(`${API_URL}/api/broadband/user-selections`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(selection),
+    });
+    if (!res.ok) throw new Error('Failed to submit order');
   },
 
   async getPlansForAddress(uprn: string): Promise<BroadbandPlan[]> {
@@ -166,11 +194,15 @@ export const apiClient = {
     return plansRes.json();
   },
 
-  async validateCouponCode(code: string, productIds: string[]) {
+  async validateCouponCode(code: string, productIds: string[], itemType?: string) {
+    const body: Record<string, unknown> = { code, productIds };
+    if (itemType) {
+      body.itemType = itemType;
+    }
     const res = await fetch(`${API_URL}/api/promotions/validate-code`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, productIds })
+      body: JSON.stringify(body)
     });
     if (!res.ok) {
       const data = await res.json();
