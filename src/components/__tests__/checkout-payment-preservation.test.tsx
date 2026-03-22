@@ -21,27 +21,40 @@ const checkoutPagePath = path.resolve(__dirname, '../../app/checkout/page.tsx');
 const checkoutSource = fs.readFileSync(checkoutPagePath, 'utf-8');
 
 /**
- * Extract the JSX block for step === 'payment' from the source code.
+ * Extract the JSX block for {step === 'payment' && (...)} from the source code.
+ * We look for the pattern followed by '&&' to skip ternary usages in the stepper UI.
  */
 function extractPaymentStepBlock(source: string): string {
   const marker = `step === 'payment'`;
-  const idx = source.indexOf(marker);
-  if (idx === -1) return '';
+  let searchFrom = 0;
+  while (searchFrom < source.length) {
+    const idx = source.indexOf(marker, searchFrom);
+    if (idx === -1) return '';
 
-  // Find the opening paren after the marker
-  const afterMarker = source.indexOf('(', idx);
-  if (afterMarker === -1) return '';
+    // Check if this occurrence is followed by '&&' (the conditional render block)
+    const afterMarker = source.substring(idx + marker.length, idx + marker.length + 20).trim();
+    if (!afterMarker.startsWith('&&')) {
+      searchFrom = idx + marker.length;
+      continue;
+    }
 
-  // Track parens to find the matching close
-  let depth = 1;
-  let i = afterMarker + 1;
-  while (i < source.length && depth > 0) {
-    if (source[i] === '(') depth++;
-    else if (source[i] === ')') depth--;
-    i++;
+    // Find the opening paren after '&&'
+    const andIdx = source.indexOf('&&', idx + marker.length);
+    const parenIdx = source.indexOf('(', andIdx);
+    if (parenIdx === -1) return '';
+
+    // Track parens to find the matching close
+    let depth = 1;
+    let i = parenIdx + 1;
+    while (i < source.length && depth > 0) {
+      if (source[i] === '(') depth++;
+      else if (source[i] === ')') depth--;
+      i++;
+    }
+
+    return source.slice(parenIdx, i);
   }
-
-  return source.slice(afterMarker, i);
+  return '';
 }
 
 // --- Generators ---

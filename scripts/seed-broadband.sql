@@ -19,7 +19,7 @@ ON CONFLICT (postcode) DO NOTHING;
 -- ADDRESSES (derived from address.json — SA1 6AU / Swansea)
 -- ============================================================
 INSERT INTO addresses (postcode_id, uprn, address_line_1, address_line_2, city, full_address, technology_copper, technology_fttp, technology_sogea) VALUES
-  ('a1000000-0000-0000-0000-000000000001', 'A15099951235', 'BT Test Facility',        NULL,         'Swansea', 'BT Test Facility, Strand, Swansea, SA1 6AU',              true,  false, false),
+  ('a1000000-0000-0000-0000-000000000001', 'A15099951235', 'BT Test Facility',        NULL,         'Swansea', 'BT Test Facility, Strand, Swansea, SA1 6AU',              true,  true, false),
   ('a1000000-0000-0000-0000-000000000001', 'A15099951186', 'BT Test Facility',        'Sog5bt 10',  'Swansea', 'BT Test Facility (Sog5bt 10), Strand, Swansea, SA1 6AU',  true,  false, false),
   ('a1000000-0000-0000-0000-000000000001', 'A15099951187', 'BT Test Facility',        'Sog5bt 11',  'Swansea', 'BT Test Facility (Sog5bt 11), Strand, Swansea, SA1 6AU',  true,  false, false),
   ('a1000000-0000-0000-0000-000000000001', 'A15099951188', 'BT Test Facility',        'Sog5bt 12',  'Swansea', 'BT Test Facility (Sog5bt 12), Strand, Swansea, SA1 6AU',  true,  false, false),

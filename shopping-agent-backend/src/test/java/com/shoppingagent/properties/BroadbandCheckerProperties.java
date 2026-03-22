@@ -191,7 +191,7 @@ class BroadbandCheckerProperties {
         };
 
         BroadbandController controller = new BroadbandController(
-                neverCalledService, null, null, null, null);
+                neverCalledService, null, null, null, null, null);
 
         boolean exceptionThrown = false;
         try {

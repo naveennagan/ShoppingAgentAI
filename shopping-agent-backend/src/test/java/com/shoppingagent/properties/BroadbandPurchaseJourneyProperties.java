@@ -172,7 +172,7 @@ class BroadbandPurchaseJourneyProperties {
 
         // The controller validates planType before calling the service,
         // so we can pass null for all service dependencies
-        BroadbandController controller = new BroadbandController(null, null, null, null, null);
+        BroadbandController controller = new BroadbandController(null, null, null, null, null, null);
 
         ResponseEntity<?> response = controller.getAddons(invalidType);
 

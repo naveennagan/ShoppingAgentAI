@@ -56,4 +56,43 @@ public class ProductController {
                     .body("Service temporarily unavailable");
         }
     }
+
+    @PostMapping
+    public ResponseEntity<?> createProduct(@RequestBody Product product) {
+        logger.info("POST /api/products - Creating product: {}", product.getName());
+        try {
+            Product created = productService.createProduct(product);
+            return ResponseEntity.status(HttpStatus.CREATED).body(created);
+        } catch (SupabaseConnectionException e) {
+            logger.error("Supabase connection failed: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body("Service temporarily unavailable");
+        }
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<?> updateProduct(@PathVariable String id, @RequestBody Product product) {
+        logger.info("PUT /api/products/{} - Updating product", id);
+        try {
+            Product updated = productService.updateProduct(id, product);
+            return ResponseEntity.ok(updated);
+        } catch (SupabaseConnectionException e) {
+            logger.error("Supabase connection failed: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body("Service temporarily unavailable");
+        }
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteProduct(@PathVariable String id) {
+        logger.info("DELETE /api/products/{} - Deleting product", id);
+        try {
+            productService.deleteProduct(id);
+            return ResponseEntity.noContent().build();
+        } catch (SupabaseConnectionException e) {
+            logger.error("Supabase connection failed: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body("Service temporarily unavailable");
+        }
+    }
 }

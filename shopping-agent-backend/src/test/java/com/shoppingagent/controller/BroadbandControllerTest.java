@@ -54,6 +54,9 @@ class BroadbandControllerTest {
     @MockBean
     private com.shoppingagent.service.BundledProductService bundledProductService;
 
+    @MockBean
+    private com.shoppingagent.service.BroadbandPlanService broadbandPlanService;
+
     // --- GET /api/broadband/addresses ---
 
     @Test

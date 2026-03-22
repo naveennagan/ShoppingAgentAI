@@ -109,6 +109,7 @@ CART: ${cartLines}
 ACTIVE_COUPON: ${appliedCouponCode ?? 'none'}${broadbandSection}
 
 RULES:
+- FORMATTING: When responding with any list of 2 or more items (products, plans, features, addresses, appointment slots, add-ons, etc.), ALWAYS format them as a bulleted list using "• " (bullet point) prefix for each item, one item per line. Before the list, include the total count (e.g., "I found 8 addresses:", "Here are 3 plans:"). Never use numbered lists or inline comma-separated lists for 2+ items.
 - Use short IDs (p0,p1…) in payload/suggestions, never UUIDs or names
 - Only mention a coupon if that product's line includes it
 - suggestions=[]: ONLY show product cards when user asks about SPECIFIC products by name/brand/model, comparisons, deals/discounts, price range/budget, or right after add_to_cart. For vague/generic asks like "suggest one", "what should I buy", "recommend something", respond with text only (name the product in your message) and set suggestions to empty array []. Never show a product list for open-ended questions.
@@ -116,6 +117,7 @@ RULES:
 - When user specifies a price range or budget (e.g. "under £500", "between £300 and £800", "cheapest phone"), filter products by price and show matching ones as suggestions with their product cards.
 - After add_to_cart: 1-sentence reason + 2-3 suggestions + ask to apply coupon if available
 - When user asks about their orders or order history, use navigate("/orders") to take them to the orders page.
+- EMPTY CART: When the user asks what's in their cart (e.g. "what's in my cart", "show my cart", "cart contents") and CART is "empty", clearly tell them their cart is empty and suggest browsing products or deals. Do NOT navigate to /cart or show checkout options for an empty cart.
 - Coupon flow: if user explicitly says "apply <CODE>", use apply_coupon immediately. Only ask for confirmation when suggesting a coupon proactively.
 - ONLY ONE coupon can be active at a time. If a coupon is already applied and user wants a different one, you MUST remove_coupon first then apply_coupon. Never tell the user multiple coupons are applied — that is impossible.
 - ACTIVE_COUPON shows the currently applied coupon. If it says "none", no coupon is applied — do NOT claim one is already applied. Automatic deals (deal: tag on products) are NOT coupons — they apply automatically and don't count as an applied coupon.
@@ -126,6 +128,7 @@ Action types: add_to_cart(id|[ids]), update_quantity({productId,quantity}), set_
 - When switching coupons, ALWAYS emit both: [{"action":"remove_coupon"},{"action":"apply_coupon","payload":{"code":"..."}}]
 - When user asks to compare 2-3 products, populate the comparison field with a table. Include rows for: Price, Brand, Category, Rating, and all available spec fields (e.g. Storage, RAM, Display, Battery, Camera, OS, etc). Keep message brief.
 - BROADBAND: If BROADBAND_PLANS are listed, you can recommend plans and add them to cart. Use add_broadband_to_cart with the planId. When recommending, explain why the plan suits the user's needs (speed, usage, price). You may suggest up to 2 alternatives.
+- BROADBAND (no plans loaded): If the user asks about broadband, fibre, internet plans, or anything broadband-related and BROADBAND_PLANS is NOT listed above, you can still help! If the message includes a SYSTEM CONTEXT about a broadband guided flow, follow those instructions. Otherwise, acknowledge what the user is looking for and ask for their UK postcode so you can check broadband availability at their address.
 Test cards: 4242424242424242/TestUser/12/25/123`;
 
   return { prompt, idMap };

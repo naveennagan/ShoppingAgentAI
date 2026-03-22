@@ -6,6 +6,7 @@ import com.shoppingagent.model.BroadbandPlan;
 import com.shoppingagent.model.BroadbandRecommendation;
 import com.shoppingagent.service.AddressLookupService;
 import com.shoppingagent.service.BroadbandAiAdvisorService;
+import com.shoppingagent.service.BroadbandPlanService;
 import com.shoppingagent.service.BundledProductService;
 import com.shoppingagent.service.EligibilityService;
 import com.shoppingagent.service.ProductQualificationService;
@@ -31,17 +32,20 @@ public class BroadbandController {
     private final ProductQualificationService productQualificationService;
     private final BroadbandAiAdvisorService broadbandAiAdvisorService;
     private final BundledProductService bundledProductService;
+    private final BroadbandPlanService broadbandPlanService;
 
     public BroadbandController(AddressLookupService addressLookupService,
                                 EligibilityService eligibilityService,
                                 ProductQualificationService productQualificationService,
                                 BroadbandAiAdvisorService broadbandAiAdvisorService,
-                                BundledProductService bundledProductService) {
+                                BundledProductService bundledProductService,
+                                BroadbandPlanService broadbandPlanService) {
         this.addressLookupService = addressLookupService;
         this.eligibilityService = eligibilityService;
         this.productQualificationService = productQualificationService;
         this.broadbandAiAdvisorService = broadbandAiAdvisorService;
         this.bundledProductService = bundledProductService;
+        this.broadbandPlanService = broadbandPlanService;
     }
 
     @GetMapping("/addresses")
@@ -105,6 +109,34 @@ public class BroadbandController {
         BroadbandRecommendation recommendation =
                 broadbandAiAdvisorService.recommend(request.getPlans(), request.getUsageDescription());
         return ResponseEntity.ok(recommendation);
+    }
+
+    @PostMapping("/plans")
+    public ResponseEntity<BroadbandPlan> createPlan(@RequestBody BroadbandPlan plan) {
+        logger.info("POST /api/broadband/plans - Creating plan: {}", plan.getName());
+        BroadbandPlan created = broadbandPlanService.createPlan(plan);
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
+    }
+
+    @PutMapping("/plans/{planId}")
+    public ResponseEntity<BroadbandPlan> updatePlan(@PathVariable String planId, @RequestBody BroadbandPlan plan) {
+        logger.info("PUT /api/broadband/plans/{} - Updating plan", planId);
+        BroadbandPlan updated = broadbandPlanService.updatePlan(planId, plan);
+        return ResponseEntity.ok(updated);
+    }
+
+    @DeleteMapping("/plans/{planId}")
+    public ResponseEntity<Void> deletePlan(@PathVariable String planId) {
+        logger.info("DELETE /api/broadband/plans/{} - Deleting plan", planId);
+        broadbandPlanService.deletePlan(planId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/plans/{planId}/deactivate")
+    public ResponseEntity<Void> deactivatePlan(@PathVariable String planId) {
+        logger.info("PATCH /api/broadband/plans/{}/deactivate - Deactivating plan", planId);
+        broadbandPlanService.deactivatePlan(planId);
+        return ResponseEntity.noContent().build();
     }
 
     public static class RecommendRequest {

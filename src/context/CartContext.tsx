@@ -110,7 +110,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         const fetchPromotions = async () => {
             const promoMap: Record<string, CartItemPromotion> = {};
             await Promise.all(
-                items.map(async (item) => {
+                items.filter(item => item.item_type !== 'broadband_service').map(async (item) => {
                     try {
                         const promotions: Promotion[] = await apiClient.getPromotionsForProduct(item.product.id);
                         const activePromo = promotions.find(p => p.active && !p.promoCode);
