@@ -4,7 +4,7 @@ import { ChatBubble, Chip, ComparisonTable, TypingIndicator } from '../ui';
 import SummaryCard, { ProductSummary, BroadbandSummary, AddonSummary, TvPackageSummary, SimPlanSummary, HomePhoneSummary } from '../SummaryCard';
 import SuggestionChip from '../SuggestionChip';
 import type { ChatMessage } from './types';
-import { QUICK_ACTIONS, DEFAULT_BROADBAND_CHIPS, DEFAULT_PRODUCT_CHIPS } from './constants';
+import { QUICK_ACTIONS } from './constants';
 
 interface ChatMessagesProps {
     messages: ChatMessage[];
@@ -16,20 +16,8 @@ interface ChatMessagesProps {
     onCardAction: (actionType: string, id: string) => void;
 }
 
-function detectQueryCategory(text: string): 'broadband' | 'product' {
-    const lower = text.toLowerCase();
-    const broadbandKeywords = ['broadband', 'fibre', 'internet', 'wifi', 'speed', 'download', 'upload', 'plan', 'mbps'];
-    return broadbandKeywords.some(k => lower.includes(k)) ? 'broadband' : 'product';
-}
 
-function getDefaultChips(lastUserMsg: string): string[] {
-    return detectQueryCategory(lastUserMsg) === 'broadband' ? DEFAULT_BROADBAND_CHIPS : DEFAULT_PRODUCT_CHIPS;
-}
 
-function clampChips(chips: string[]): string[] {
-    if (chips.length < 2) return chips.concat(chips.length === 0 ? ['Show deals', 'Help'] : ['Help']).slice(0, 2);
-    return chips.slice(0, 4);
-}
 
 export default function ChatMessages({
     messages, isTyping, showQuickActions, panelWidth,
@@ -86,16 +74,13 @@ export default function ChatMessages({
                         </div>
                     )}
 
-                    {msg.role === 'ai' && i > 0 && (
+                    {msg.role === 'ai' && i > 0 && msg.suggestedActions && msg.suggestedActions.length > 0 && (
                         <div style={{
                             display: 'flex', flexWrap: 'wrap', gap: '0.4rem',
                             paddingTop: '0.25rem', maxWidth: `${panelWidth - 40}px`,
                             maxHeight: '150px', overflowY: 'auto',
                         }}>
-                            {(msg.suggestedActions
-                                ? msg.suggestedActions
-                                : clampChips(getDefaultChips(messages.slice(0, i).reverse().find(m => m.role === 'user')?.text ?? ''))
-                            ).map(label => (
+                            {msg.suggestedActions.map(label => (
                                 <SuggestionChip key={label} label={label} onClick={onSendMessage} />
                             ))}
                         </div>

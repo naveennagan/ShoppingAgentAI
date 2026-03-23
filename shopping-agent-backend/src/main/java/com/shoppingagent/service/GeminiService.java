@@ -142,19 +142,27 @@ public class GeminiService {
                "- Show user order history\n\n" +
                "RESPONSE FORMAT:\n" +
                "You MUST respond with a JSON object containing:\n" +
-               "{\"action\": \"NAVIGATE\" | \"ADD_TO_CART\" | \"CLEAR_CART\" | \"SHOW_PRODUCTS\" | \"NONE\", " +
+               "{\"action\": \"NAVIGATE\" | \"ADD_TO_CART\" | \"CLEAR_CART\" | \"SHOW_PRODUCTS\" | \"ADVANCE_STEP\" | \"NONE\", " +
                "\"payload\": \"URL path\" | \"Product ID\" | \"Comma-separated Product IDs\" | null, " +
                "\"message\": \"Helpful response to user\", " +
                "\"summaryCards\": [{\"type\": \"product\" | \"broadband\", \"id\": \"UUID\", \"name\": \"...\", \"price\": 0.0, \"brand\": \"...\", \"rating\": 0.0, " +
                "\"downloadSpeed\": \"...\", \"uploadSpeed\": \"...\", \"monthlyPrice\": 0.0, \"contractLength\": \"...\", \"promotionalLabel\": \"...\"}], " +
-               "\"suggestedActions\": [\"action label 1\", \"action label 2\"]}\n\n" +
+               "\"suggestedActions\": [\"action label 1\", \"action label 2\"], " +
+               "\"comparison\": {\"products\": [\"Name A\", \"Name B\"], \"rows\": [{\"field\": \"Price\", \"values\": [\"£x\", \"£y\"]}]}}\n\n" +
+               "COMPARISON:\n" +
+               "- When the user asks to compare 2-3 products, include a comparison field in the response.\n" +
+               "- Format: \"comparison\": {\"products\": [\"Product A\", \"Product B\"], \"rows\": [{\"field\": \"Price\", \"values\": [\"£x\", \"£y\"]}, {\"field\": \"Brand\", \"values\": [\"A\", \"B\"]}]}\n" +
+               "- Include rows for: Price, Brand, Category, Rating, and all available spec fields (Storage, RAM, Display, Battery, Camera, OS, etc).\n" +
+               "- Keep the message brief when showing a comparison table.\n\n" +
                "SUMMARY CARDS:\n" +
                "- Include summaryCards array when recommending products or broadband plans\n" +
                "- For products: include type, id, name, price, brand, rating, and promotionalLabel (if applicable)\n" +
                "- For broadband plans: include type, id, name, downloadSpeed, uploadSpeed, monthlyPrice, contractLength, and promotionalLabel (if applicable)\n" +
                "- Omit summaryCards if no specific items are being recommended\n\n" +
                "SUGGESTED ACTIONS:\n" +
-               "- Include suggestedActions array with 2-4 contextual follow-up actions the user might want to take\n" +
+               "- Only include suggestedActions in these situations: (1) after showing products/plans, (2) after adding to cart, (3) when the user first starts a conversation, (4) when the user seems unsure what to do next.\n" +
+               "- Do NOT include suggestedActions for simple conversational replies, confirmations, or when the user is clearly in the middle of a task.\n" +
+               "- When included, limit to 2-4 contextual follow-up actions.\n" +
                "- Examples: \"Compare plans\", \"Check availability\", \"View add-ons\", \"Add to cart\", \"Show deals\"\n\n" +
                "EXAMPLES:\n" +
                "User: \"Show me phones\" → {\"action\":\"SHOW_PRODUCTS\",\"payload\":\"1,2,3\",\"message\":\"Here are our available phones:\",\"summaryCards\":[...],\"suggestedActions\":[\"Compare prices\",\"View specs\"]}\n" +
@@ -172,7 +180,8 @@ public class GeminiService {
                "- Never use NONE action for product display requests\n" +
                "- When the user asks about their cart contents and the CURRENT CART is empty, clearly tell them their cart is empty and suggest browsing products. Do NOT navigate to /cart or show checkout options for an empty cart.\n" +
                "- If the user asks about broadband, fibre, internet plans, or anything broadband-related, DO NOT say you don't have broadband. Acknowledge what they are looking for and ask for their UK postcode so you can check broadband availability at their address. If a SYSTEM CONTEXT is provided about a broadband guided flow, follow those instructions.\n" +
-               "- Use the source IDs from the RELEVANT CONTEXT when referencing products or plans");
+               "- Use the source IDs from the RELEVANT CONTEXT when referencing products or plans\n" +
+               "- ADVANCE_STEP: When a SYSTEM CONTEXT mentions a broadband guided flow step and the user clearly wants to skip, move on, proceed, or is done with the current optional step (add-ons, TV packages, SIM plans, home phone), use action ADVANCE_STEP. This tells the frontend to move to the next step. Include a brief friendly message acknowledging their choice.");
 
         return prompt.toString();
     }
@@ -191,9 +200,12 @@ public class GeminiService {
                "- Show user order history\n\n" +
                "RESPONSE FORMAT:\n" +
                "You MUST respond with a JSON object containing:\n" +
-               "{\"action\": \"NAVIGATE\" | \"ADD_TO_CART\" | \"CLEAR_CART\" | \"SHOW_PRODUCTS\" | \"NONE\", " +
+               "{\"action\": \"NAVIGATE\" | \"ADD_TO_CART\" | \"CLEAR_CART\" | \"SHOW_PRODUCTS\" | \"ADVANCE_STEP\" | \"NONE\", " +
                "\"payload\": \"URL path\" | \"Product ID\" | \"Comma-separated Product IDs\" | null, " +
                "\"message\": \"Helpful response to user\"}\n\n" +
+               "COMPARISON:\n" +
+               "- When the user asks to compare 2-3 products, include a comparison field: \"comparison\": {\"products\": [\"Name A\", \"Name B\"], \"rows\": [{\"field\": \"Price\", \"values\": [\"£x\", \"£y\"]}]}\n" +
+               "- Include rows for: Price, Brand, Category, Rating, and all available spec fields.\n\n" +
                "EXAMPLES:\n" +
                "User: \"Show me phones\" → {\"action\":\"SHOW_PRODUCTS\",\"payload\":\"1,2,3\",\"message\":\"Here are our available phones:\"}\n" +
                "User: \"Show me iPhones\" → {\"action\":\"SHOW_PRODUCTS\",\"payload\":\"1,2\",\"message\":\"Here are our iPhones:\"}\n" +
@@ -206,7 +218,8 @@ public class GeminiService {
                "- Include relevant product IDs in payload as comma-separated string\n" +
                "- Never use NONE action for product display requests\n" +
                "- When the user asks about their cart contents and the cart is empty, clearly tell them their cart is empty and suggest browsing products. Do NOT navigate to /cart or show checkout options for an empty cart.\n" +
-               "- If the user asks about broadband, fibre, internet plans, or anything broadband-related, DO NOT say you don't have broadband. Acknowledge what they are looking for and ask for their UK postcode so you can check broadband availability at their address. If a SYSTEM CONTEXT is provided about a broadband guided flow, follow those instructions.";
+               "- If the user asks about broadband, fibre, internet plans, or anything broadband-related, DO NOT say you don't have broadband. Acknowledge what they are looking for and ask for their UK postcode so you can check broadband availability at their address. If a SYSTEM CONTEXT is provided about a broadband guided flow, follow those instructions.\n" +
+               "- ADVANCE_STEP: When a SYSTEM CONTEXT mentions a broadband guided flow step and the user clearly wants to skip, move on, proceed, or is done with the current optional step (add-ons, TV packages, SIM plans, home phone), use action ADVANCE_STEP. This tells the frontend to move to the next step. Include a brief friendly message acknowledging their choice.";
     }
     
     private String buildRequestBody(String systemPrompt, ChatRequest request) {

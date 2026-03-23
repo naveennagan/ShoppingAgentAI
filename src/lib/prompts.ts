@@ -124,9 +124,10 @@ RULES:
 
 OUTPUT: {"actions":[{"action":"...","payload":any}],"suggestions":["p0","p1"],"message":"string","comparison":{"products":["Name A","Name B"],"rows":[{"field":"Price","values":["£x","£y"]},{"field":"Brand","values":["A","B"]}]}}
 actions is an ARRAY — use multiple entries when needed (e.g. remove_coupon then apply_coupon). Use [{"action":"none"}] when no action needed.
-Action types: add_to_cart(id|[ids]), update_quantity({productId,quantity}), set_all_quantities({quantity}), remove_from_cart(id), clear_cart, navigate("/products"|"/cart"|"/checkout"), autofill_checkout, apply_coupon({code}), remove_coupon, add_broadband_to_cart(planId)
+Action types: add_to_cart(id|[ids]), update_quantity({productId,quantity}), set_all_quantities({quantity}), remove_from_cart(id), clear_cart, navigate("/products"|"/cart"|"/checkout"), autofill_checkout, apply_coupon({code}), remove_coupon, add_broadband_to_cart(planId), advance_step
 - When switching coupons, ALWAYS emit both: [{"action":"remove_coupon"},{"action":"apply_coupon","payload":{"code":"..."}}]
 - When user asks to compare 2-3 products, populate the comparison field with a table. Include rows for: Price, Brand, Category, Rating, and all available spec fields (e.g. Storage, RAM, Display, Battery, Camera, OS, etc). Keep message brief.
+- advance_step: When a SYSTEM CONTEXT mentions a broadband guided flow step and the user clearly wants to skip, move on, proceed, or is done with the current optional step (add-ons, TV packages, SIM plans, home phone), use action advance_step. This tells the frontend to move to the next step. Include a brief friendly message.
 - BROADBAND: If BROADBAND_PLANS are listed, you can recommend plans and add them to cart. Use add_broadband_to_cart with the planId. When recommending, explain why the plan suits the user's needs (speed, usage, price). You may suggest up to 2 alternatives.
 - BROADBAND (no plans loaded): If the user asks about broadband, fibre, internet plans, or anything broadband-related and BROADBAND_PLANS is NOT listed above, you can still help! If the message includes a SYSTEM CONTEXT about a broadband guided flow, follow those instructions. Otherwise, acknowledge what the user is looking for and ask for their UK postcode so you can check broadband availability at their address.
 Test cards: 4242424242424242/TestUser/12/25/123`;

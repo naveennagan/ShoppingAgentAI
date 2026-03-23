@@ -13,6 +13,21 @@ public class ChatResponse {
     private String message;
     private List<SummaryCard> summaryCards;
     private List<String> suggestedActions;
+    private ComparisonData comparison;
+
+    @Data
+    @NoArgsConstructor
+    public static class ComparisonData {
+        private List<String> products;
+        private List<ComparisonRow> rows;
+    }
+
+    @Data
+    @NoArgsConstructor
+    public static class ComparisonRow {
+        private String field;
+        private List<String> values;
+    }
 
     /**
      * Backward-compatible constructor for existing code that creates

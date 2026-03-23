@@ -54,34 +54,12 @@ export function useGuidedFlow() {
 
     // ── Step handlers ───────────────────────────────────────────────────
 
-    const startGuidedFlow = useCallback(async (userMessage: string) => {
+    const startGuidedFlow = useCallback(async (_userMessage: string) => {
         setGuidedFlow({ ...INITIAL_GUIDED_FLOW_STATE, active: true, currentStep: 'postcode' });
-        setIsTyping(true);
-        try {
-            const context = 'The user wants to explore broadband plans. We are starting a guided broadband purchase journey. The first step is to collect their UK postcode to check availability. Respond helpfully to their message, acknowledge what they are looking for, and ask them to enter their postcode so we can check what broadband plans are available at their address.';
-            const history = messages.slice(-10).map(m => ({ role: m.role === 'user' ? 'user' : 'ai', text: m.text }));
-            const res = await fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    message: `${userMessage}\n\n[SYSTEM CONTEXT: ${context}]`, history,
-                    cartItems: cart.map(i => ({ productId: i.product.id, name: i.product.name, price: i.product.price, quantity: i.quantity })),
-                    appliedCouponCode: appliedCoupon?.promotionName ?? null,
-                    broadbandPlans: broadbandPlans.length > 0 ? broadbandPlans : undefined
-                })
-            });
-            const data = await res.json();
-            addAiMessage(sanitizeAiMessage(data.message) ?? "I can help you find broadband for your address! Let's start — please enter your postcode.", {
-                suggestedActions: ['Cancel'],
-            });
-        } catch {
-            addAiMessage("I can help you find broadband for your address! Let's start — please enter your postcode.", {
-                suggestedActions: ['Cancel'],
-            });
-        } finally {
-            setIsTyping(false);
-        }
-    }, [addAiMessage, messages, cart, appliedCoupon, broadbandPlans]);
+        addAiMessage("I can help you find the right broadband plan! Let's start by checking what's available at your address. Please enter your UK postcode (e.g. SW1A 1AA).", {
+            suggestedActions: ['Cancel'],
+        });
+    }, [addAiMessage]);
 
     const handlePostcodeStep = useCallback(async (postcode: string) => {
         setGuidedFlow(prev => ({ ...prev, postcode, currentStep: 'address' }));
@@ -582,16 +560,16 @@ export function useGuidedFlow() {
             address: `The user is selecting their address from a list (postcode: ${flow.postcode ?? 'unknown'}). They need to pick an address number before we can check plans.`,
             preferences: `The user has selected their address (${flow.selectedAddress?.formattedAddress ?? 'unknown'}). They can now tell us their broadband preferences (speed, budget, contract length) or ask to see all plans.`,
             plan: `We are showing broadband plans available at ${flow.selectedAddress?.formattedAddress ?? 'their address'}. The user needs to select a plan.`,
-            addons: `The user selected the "${flow.selectedPlan?.name ?? 'unknown'}" plan (${flow.selectedPlan?.downloadSpeedMbps ?? '?'} Mbps, £${flow.selectedPlan?.monthlyPrice?.toFixed(2) ?? '?'}/mo). They can now choose add-ons or continue to TV packages.`,
-            tv_packages: `The user is choosing an optional TV package to add to their broadband order. They can select one or skip.`,
-            sim_plans: `The user is choosing an optional SIM plan to add to their broadband order. They can select one or skip.`,
-            home_phone: `The user is choosing an optional home phone service to add to their broadband order. They can select one or skip.`,
+            addons: `The user selected the "${flow.selectedPlan?.name ?? 'unknown'}" plan (${flow.selectedPlan?.downloadSpeedMbps ?? '?'} Mbps, £${flow.selectedPlan?.monthlyPrice?.toFixed(2) ?? '?'}/mo). They are choosing optional add-ons. The next step is TV packages.\nIMPORTANT: If the user indicates they want to move on, skip, proceed, are done with add-ons, or don't want any more — respond with action "advance_step". Only keep them here if they are actively asking about or selecting add-ons.`,
+            tv_packages: `The user is choosing an optional TV package to add to their broadband order. They can select one or skip. The next step is SIM plans.\nIMPORTANT: If the user indicates they want to skip, move on, don't want a TV package, or are done — respond with action "advance_step". Only keep them here if they are actively asking about or selecting a TV package.`,
+            sim_plans: `The user is choosing an optional SIM plan to add to their broadband order. They can select one or skip. The next step is home phone services.\nIMPORTANT: If the user indicates they want to skip, move on, don't want a SIM plan, or are done — respond with action "advance_step". Only keep them here if they are actively asking about or selecting a SIM plan.`,
+            home_phone: `The user is choosing an optional home phone service to add to their broadband order. They can select one or skip. The next step is the order summary.\nIMPORTANT: If the user indicates they want to skip, move on, don't want a home phone service, or are done — respond with action "advance_step". Only keep them here if they are actively asking about or selecting a home phone service.`,
             summary: `The user is reviewing their broadband order summary for "${flow.selectedPlan?.name ?? 'unknown'}" plan. They can add it to cart, go back, or start over.`,
         };
-        return `\n\nBROADBAND GUIDED FLOW CONTEXT:\nCurrent step: ${flow.currentStep}\n${stepDescriptions[flow.currentStep]}\nRespond helpfully to the user's question while gently guiding them back to complete the current step. Include the step-specific suggestion in your response.`;
+        return `\n\nBROADBAND GUIDED FLOW CONTEXT:\nCurrent step: ${flow.currentStep}\n${stepDescriptions[flow.currentStep]}\nRespond helpfully to the user's question while guiding them through the current step.`;
     }, []);
 
-    const sendToAI = useCallback(async (text: string, extraContext?: string): Promise<void> => {
+    const sendToAI = useCallback(async (text: string, extraContext?: string): Promise<boolean> => {
         const history = messages.slice(-10).map(m => ({ role: m.role === 'user' ? 'user' : 'ai', text: m.text }));
         const messageWithContext = extraContext ? `${text}\n\n[SYSTEM CONTEXT: ${extraContext}]` : text;
         const res = await fetch('/api/chat', {
@@ -605,6 +583,16 @@ export function useGuidedFlow() {
             })
         });
         const data = await res.json();
+
+        // Check if AI wants to advance the guided flow step
+        const aiAction = (data.action ?? data.actions?.[0]?.action ?? '').toLowerCase();
+        if (aiAction === 'advance_step') {
+            // Show the AI's acknowledgment message before advancing
+            if (data.message) {
+                setMessages(prev => [...prev, { role: 'ai', text: sanitizeAiMessage(data.message) }]);
+            }
+            return true; // signal caller to advance
+        }
 
         const flow = guidedFlowRef.current;
         const stripBroadbandSteps: GuidedFlowStep[] = ['postcode', 'address', 'plan'];
@@ -637,6 +625,7 @@ export function useGuidedFlow() {
             summaryCards,
             suggestedActions: suggestedActions.length > 0 ? suggestedActions : undefined,
         }]);
+        return false;
     }, [messages, cart, appliedCoupon, broadbandPlans]);
 
     // ── Guided flow message processor ───────────────────────────────────
@@ -730,7 +719,8 @@ export function useGuidedFlow() {
         }
 
         if (flow.currentStep === 'addons') {
-            if (lower.includes('continue') || lower === 'skip' || lower === 'no thanks') {
+            // Direct advance: "continue", "skip", "next", "done", "no thanks", "move on", "proceed"
+            if (/^(continue|skip|next|done|no thanks|no|nope|move on|proceed|i'?m good|that'?s it|that'?s all)$/i.test(lower)) {
                 await handleTvPackagesStep();
                 return true;
             }
@@ -808,12 +798,14 @@ export function useGuidedFlow() {
                 await fetchAndDisplayAddons(showAllFilter);
                 return true;
             }
-            await sendToAI(text, buildGuidedFlowContext());
+            const shouldAdvance = await sendToAI(text, buildGuidedFlowContext());
+            if (shouldAdvance) await handleTvPackagesStep();
             return true;
         }
 
         if (flow.currentStep === 'tv_packages') {
-            if (lower === 'skip' || lower === 'no thanks' || lower === 'continue') {
+            // Direct advance
+            if (/^(continue|skip|next|done|no thanks|no|nope|move on|proceed|i'?m good|that'?s it|that'?s all)$/i.test(lower)) {
                 await handleSimPlansStep();
                 return true;
             }
@@ -836,12 +828,14 @@ export function useGuidedFlow() {
                 await handleSimPlansStep();
                 return true;
             }
-            await sendToAI(text, buildGuidedFlowContext());
+            const shouldAdvanceTv = await sendToAI(text, buildGuidedFlowContext());
+            if (shouldAdvanceTv) await handleSimPlansStep();
             return true;
         }
 
         if (flow.currentStep === 'sim_plans') {
-            if (lower === 'skip' || lower === 'no thanks' || lower === 'continue') {
+            // Direct advance
+            if (/^(continue|skip|next|done|no thanks|no|nope|move on|proceed|i'?m good|that'?s it|that'?s all)$/i.test(lower)) {
                 await handleHomePhoneStep();
                 return true;
             }
@@ -862,12 +856,14 @@ export function useGuidedFlow() {
                 await handleHomePhoneStep();
                 return true;
             }
-            await sendToAI(text, buildGuidedFlowContext());
+            const shouldAdvanceSim = await sendToAI(text, buildGuidedFlowContext());
+            if (shouldAdvanceSim) await handleHomePhoneStep();
             return true;
         }
 
         if (flow.currentStep === 'home_phone') {
-            if (lower === 'skip' || lower === 'no thanks' || lower === 'continue' || lower.includes('continue to summary')) {
+            // Direct advance
+            if (/^(continue|skip|next|done|no thanks|no|nope|move on|proceed|i'?m good|that'?s it|that'?s all)$/i.test(lower)) {
                 handleSummaryStep();
                 return true;
             }
@@ -888,7 +884,8 @@ export function useGuidedFlow() {
                 handleSummaryStep();
                 return true;
             }
-            await sendToAI(text, buildGuidedFlowContext());
+            const shouldAdvancePhone = await sendToAI(text, buildGuidedFlowContext());
+            if (shouldAdvancePhone) handleSummaryStep();
             return true;
         }
 

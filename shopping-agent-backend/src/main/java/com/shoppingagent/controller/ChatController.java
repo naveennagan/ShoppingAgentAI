@@ -35,17 +35,24 @@ public class ChatController {
     public ChatResponse chat(@RequestBody ChatRequest request) {
         logger.info("POST /api/chat - Message: {}", request.getMessage());
 
-        // Retrieve RAG context for the user query
-        RagContext ragContext = ragService.retrieveContext(request.getMessage());
-
+        // Skip RAG for messages that don't need product/broadband knowledge
         ChatResponse response;
-        if (ragContext != null) {
-            logger.info("RAG context retrieved: {} documents, {} source IDs",
-                    ragContext.getDocumentCount(), ragContext.getSourceIds().size());
-            response = geminiService.chatWithContext(request, ragContext);
+        RagContext ragContext = null;
+
+        if (needsRagContext(request.getMessage())) {
+            ragContext = ragService.retrieveContext(request.getMessage());
+
+            if (ragContext != null) {
+                logger.info("RAG context retrieved: {} documents, {} source IDs",
+                        ragContext.getDocumentCount(), ragContext.getSourceIds().size());
+                response = geminiService.chatWithContext(request, ragContext);
+            } else {
+                logger.warn("RAG context unavailable, falling back to full-catalog prompt");
+                response = geminiService.chat(request);
+            }
         } else {
-            logger.warn("RAG context unavailable, falling back to full-catalog prompt");
-            response = geminiService.chat(request);
+            logger.info("Skipping RAG - message does not require product context");
+            response = geminiService.chatWithContext(request, null);
         }
 
         // Resolve short IDs (p0, p1…) to real UUIDs from RagContext
@@ -56,6 +63,57 @@ public class ChatController {
                 : "(null)";
         logger.info("AI Response - Action: {}, Message: {}", response.getAction(), messagePreview);
         return response;
+    }
+
+    /**
+     * Determines whether a message needs RAG context (product/broadband knowledge).
+     * Cart operations, navigation, greetings, and guided flow control don't need RAG.
+     */
+    private boolean needsRagContext(String message) {
+        if (message == null || message.isEmpty()) return false;
+
+        String lower = message.toLowerCase().trim();
+
+        // Strip SYSTEM CONTEXT for intent detection
+        int systemCtxIdx = lower.indexOf("[system context:");
+        String userPart = systemCtxIdx >= 0 ? lower.substring(0, systemCtxIdx).trim() : lower;
+
+        // Cart operations
+        if (userPart.matches(".*(what('?s| is) in my cart|show my cart|view cart|cart contents|clear (my )?cart|empty (my )?cart|remove .* from cart).*")) {
+            return false;
+        }
+
+        // Navigation
+        if (userPart.matches(".*(go to|take me to|navigate to|open) (cart|checkout|orders|home|products page).*")) {
+            return false;
+        }
+
+        // Greetings and simple responses
+        if (userPart.matches("^(hi|hello|hey|thanks|thank you|ok|okay|yes|no|sure|bye|help)$")) {
+            return false;
+        }
+
+        // Guided flow control (these are handled by frontend, but if they reach backend)
+        if (userPart.matches("^(cancel|go back|back|start over|skip|continue|next|done|proceed)$")) {
+            return false;
+        }
+
+        // Coupon operations
+        if (userPart.matches(".*(apply|use|remove|delete) (coupon|code|promo|voucher|discount).*")) {
+            return false;
+        }
+
+        // Quantity updates
+        if (userPart.matches(".*(change|update|set) (quantity|qty).*")) {
+            return false;
+        }
+
+        // Checkout
+        if (userPart.matches(".*(checkout|pay|payment|place order|complete order).*")) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
