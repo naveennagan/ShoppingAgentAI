@@ -12,4 +12,5 @@ public class AppointmentRequest {
     private String preferredDate;     // ISO date string
     private String preferredTimeSlot; // "morning" | "afternoon"
     private String broadbandItemId;   // optional: identifies which broadband plan this appointment is for
+    private Double discountedMonthlyTotal; // optional: voucher-discounted price from frontend
 }

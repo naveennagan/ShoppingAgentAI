@@ -19,7 +19,7 @@ interface AboutYou {
 }
 
 export default function CheckoutPage() {
-  const { removeFromCart, items } = useCart();
+  const { removeFromCart, items, payMonthlyTotal, broadbandDiscount, appliedBroadbandVoucher } = useCart();
   const router = useRouter();
 
   const [session, setSession] = useState<CheckoutSession | null>(null);
@@ -120,7 +120,11 @@ export default function CheckoutPage() {
 
   const handleBookAppointment = async (date: string, slot: string, broadbandItemId: string) => {
     const sessionId = localStorage.getItem('sessionId')!;
-    const appt = await apiClient.bookAppointment({ sessionId, preferredDate: date, preferredTimeSlot: slot, broadbandItemId });
+    // Pass discounted monthly total if a broadband voucher is applied
+    const discountedMonthlyTotal = appliedBroadbandVoucher && broadbandDiscount > 0
+      ? payMonthlyTotal
+      : undefined;
+    const appt = await apiClient.bookAppointment({ sessionId, preferredDate: date, preferredTimeSlot: slot, broadbandItemId, discountedMonthlyTotal });
     // Store appointment keyed by broadbandItemId
     setAppointments(prev => ({ ...prev, [broadbandItemId]: appt }));
     // Update broadbandBookingStatus for this specific item
@@ -318,6 +322,8 @@ export default function CheckoutPage() {
                 appointments={appointments}
                 onBook={handleBookAppointment}
                 onCancel={handleCancelBroadbandItem}
+                discountedMonthlyTotal={appliedBroadbandVoucher && broadbandDiscount > 0 ? payMonthlyTotal : undefined}
+                broadbandDiscount={broadbandDiscount}
               />
             )}
           </div>

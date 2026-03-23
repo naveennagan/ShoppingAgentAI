@@ -9,6 +9,8 @@ interface Props {
   appointments: Record<string, Appointment>;
   onBook: (date: string, slot: string, broadbandItemId: string) => Promise<void>;
   onCancel: (broadbandItemId: string) => void;
+  discountedMonthlyTotal?: number;
+  broadbandDiscount?: number;
 }
 
 const SLOTS = [
@@ -27,8 +29,9 @@ function nextDueDate(): string {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-export default function BroadbandSection({ session, appointments, onBook, onCancel }: Props) {
+export default function BroadbandSection({ session, appointments, onBook, onCancel, discountedMonthlyTotal, broadbandDiscount }: Props) {
   const { broadbandBookingStatus, serviceItems } = session;
+  const hasDiscount = discountedMonthlyTotal != null && broadbandDiscount != null && broadbandDiscount > 0;
 
   const allBooked = serviceItems.length > 0 &&
     serviceItems.every(item => broadbandBookingStatus[item.cartItemId] && broadbandBookingStatus[item.cartItemId] !== 'unbooked');
@@ -60,7 +63,16 @@ export default function BroadbandSection({ session, appointments, onBook, onCanc
                       </p>
                     )}
                   </div>
-                  <span style={{ fontWeight: 600, fontSize: '0.88rem' }}>£{item.unitPrice.toFixed(2)}/mo</span>
+                  <span style={{ fontWeight: 600, fontSize: '0.88rem' }}>
+                    {hasDiscount ? (
+                      <>
+                        <span style={{ textDecoration: 'line-through', color: '#9ca3af', marginRight: '0.4rem' }}>£{item.unitPrice.toFixed(2)}</span>
+                        <span style={{ color: '#15803d' }}>£{(item.unitPrice - (broadbandDiscount! / serviceItems.length)).toFixed(2)}/mo</span>
+                      </>
+                    ) : (
+                      <>£{item.unitPrice.toFixed(2)}/mo</>
+                    )}
+                  </span>
                 </div>
               </div>
             );
@@ -76,9 +88,15 @@ export default function BroadbandSection({ session, appointments, onBook, onCanc
               <span style={{ fontWeight: 600 }}>£{item.unitPrice.toFixed(2)}/mo</span>
             </div>
           ))}
+          {hasDiscount && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.88rem', marginBottom: '0.4rem', color: '#15803d' }}>
+              <span>Voucher discount</span>
+              <span style={{ fontWeight: 600 }}>-£{broadbandDiscount!.toFixed(2)}/mo</span>
+            </div>
+          )}
           <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '0.6rem', marginTop: '0.4rem', display: 'flex', justifyContent: 'space-between', fontWeight: 800 }}>
             <span>Monthly total</span>
-            <span style={{ color: 'var(--primary)' }}>£{session.monthlyTotal.toFixed(2)}/mo</span>
+            <span style={{ color: 'var(--primary)' }}>£{(hasDiscount ? discountedMonthlyTotal! : session.monthlyTotal).toFixed(2)}/mo</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem', fontSize: '0.82rem', color: '#6b7280' }}>
             <span>Next payment due</span>
@@ -105,6 +123,7 @@ export default function BroadbandSection({ session, appointments, onBook, onCanc
               key={item.cartItemId}
               itemName={item.displayName}
               unitPrice={item.unitPrice}
+              discountedPrice={hasDiscount ? item.unitPrice - (broadbandDiscount! / serviceItems.length) : undefined}
               appointment={appt}
               onCancel={() => onCancel(item.cartItemId)}
             />
@@ -118,6 +137,7 @@ export default function BroadbandSection({ session, appointments, onBook, onCanc
             itemName={item.displayName}
             itemSummary={item.displaySummary}
             unitPrice={item.unitPrice}
+            discountedPrice={hasDiscount ? item.unitPrice - (broadbandDiscount! / serviceItems.length) : undefined}
             onBook={onBook}
             onCancel={() => onCancel(item.cartItemId)}
           />
@@ -129,13 +149,15 @@ export default function BroadbandSection({ session, appointments, onBook, onCanc
 
 
 /* ─── Booked item card ─── */
-function BookedItemCard({ itemName, unitPrice, appointment, onCancel }: {
+function BookedItemCard({ itemName, unitPrice, discountedPrice, appointment, onCancel }: {
   itemName: string;
   unitPrice: number;
+  discountedPrice?: number;
   appointment?: Appointment;
   onCancel: () => void;
 }) {
   const confirmedDate = appointment?.confirmedDate || appointment?.preferredDate || '';
+  const displayPrice = discountedPrice ?? unitPrice;
   return (
     <div className="card" style={{ background: '#f0fafa', border: '1.5px solid #b2d4d6' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -149,7 +171,11 @@ function BookedItemCard({ itemName, unitPrice, appointment, onCancel }: {
               </p>
             )}
             <p style={{ color: '#6b7280', fontSize: '0.82rem', margin: '0.15rem 0 0' }}>
-              £{unitPrice.toFixed(2)}/mo
+              {discountedPrice != null ? (
+                <><span style={{ textDecoration: 'line-through', marginRight: '0.3rem' }}>£{unitPrice.toFixed(2)}</span><span style={{ color: '#15803d', fontWeight: 600 }}>£{displayPrice.toFixed(2)}/mo</span></>
+              ) : (
+                <>£{unitPrice.toFixed(2)}/mo</>
+              )}
             </p>
           </div>
         </div>
@@ -162,14 +188,16 @@ function BookedItemCard({ itemName, unitPrice, appointment, onCancel }: {
 }
 
 /* ─── Unbooked item card with its own date/slot picker ─── */
-function UnbookedItemCard({ itemId, itemName, itemSummary, unitPrice, onBook, onCancel }: {
+function UnbookedItemCard({ itemId, itemName, itemSummary, unitPrice, discountedPrice, onBook, onCancel }: {
   itemId: string;
   itemName: string;
   itemSummary?: string;
   unitPrice: number;
+  discountedPrice?: number;
   onBook: (date: string, slot: string, broadbandItemId: string) => Promise<void>;
   onCancel: () => void;
 }) {
+  const displayPrice = discountedPrice ?? unitPrice;
   const dates = useMemo(() => {
     const today = new Date();
     return Array.from({ length: 14 }, (_, i) => {
@@ -217,7 +245,13 @@ function UnbookedItemCard({ itemId, itemName, itemSummary, unitPrice, onBook, on
         </div>
         <div style={{ background: '#f3f4f6', borderRadius: '8px', padding: '0.85rem 1rem', marginBottom: '1.25rem', display: 'flex', justifyContent: 'space-between' }}>
           <span style={{ color: '#4b5563', fontSize: '0.9rem' }}>Monthly from installation</span>
-          <span style={{ fontWeight: 800 }}>£{unitPrice.toFixed(2)}/mo</span>
+          <span style={{ fontWeight: 800 }}>
+            {discountedPrice != null ? (
+              <><span style={{ textDecoration: 'line-through', color: '#9ca3af', fontWeight: 500, marginRight: '0.4rem' }}>£{unitPrice.toFixed(2)}</span><span style={{ color: '#15803d' }}>£{displayPrice.toFixed(2)}/mo</span></>
+            ) : (
+              <>£{unitPrice.toFixed(2)}/mo</>
+            )}
+          </span>
         </div>
         <p style={{ color: '#6b7280', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
           By confirming, you agree to the broadband subscription. First payment due after successful installation.
@@ -249,7 +283,8 @@ function UnbookedItemCard({ itemId, itemName, itemSummary, unitPrice, onBook, on
       </div>
       {itemSummary && <p style={{ color: '#4b5563', fontSize: '0.82rem', margin: '0.15rem 0 0.5rem' }}>{itemSummary}</p>}
       <p style={{ color: '#6b7280', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
-        Choose a date and time for your engineer visit. <strong>£{unitPrice.toFixed(2)}/mo</strong>
+        Choose a date and time for your engineer visit. <strong>£{displayPrice.toFixed(2)}/mo</strong>
+        {discountedPrice != null && <span style={{ textDecoration: 'line-through', color: '#9ca3af', marginLeft: '0.3rem', fontWeight: 400 }}>£{unitPrice.toFixed(2)}</span>}
       </p>
 
       <div style={{ marginBottom: '1.25rem' }}>

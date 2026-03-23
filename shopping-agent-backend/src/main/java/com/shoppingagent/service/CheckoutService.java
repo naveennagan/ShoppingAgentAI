@@ -351,7 +351,11 @@ public class CheckoutService {
         }
 
         // Create a separate service order for this specific broadband item
-        double monthlyTotal = cartItem.unit_price != null ? cartItem.unit_price : 0.0;
+        double originalMonthly = cartItem.unit_price != null ? cartItem.unit_price : 0.0;
+        // Use discounted price from frontend voucher if provided, otherwise use original
+        double monthlyTotal = (request.getDiscountedMonthlyTotal() != null)
+                ? request.getDiscountedMonthlyTotal()
+                : originalMonthly;
 
         JsonObject serviceOrderBody = new JsonObject();
         serviceOrderBody.addProperty("session_id", sessionId);
@@ -376,7 +380,7 @@ public class CheckoutService {
         itemBody.addProperty("product_id", cartItem.id);
         itemBody.addProperty("product_name", cartItem.display_name != null ? cartItem.display_name : "Broadband Service");
         itemBody.addProperty("price", monthlyTotal);
-        itemBody.addProperty("original_price", monthlyTotal);
+        itemBody.addProperty("original_price", originalMonthly);
         itemBody.addProperty("quantity", 1);
         supabaseClient.post("order_items", gson.toJson(itemBody));
 

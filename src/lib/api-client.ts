@@ -250,7 +250,7 @@ export const apiClient = {
     return res.json();
   },
 
-  async bookAppointment(request: AppointmentRequest): Promise<Appointment> {
+  async bookAppointment(request: AppointmentRequest & { discountedMonthlyTotal?: number }): Promise<Appointment> {
     const res = await fetch(`${API_URL}/api/checkout/appointments`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
