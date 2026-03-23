@@ -78,7 +78,7 @@ export default function PricingSummary({ state, dispatch, onOrderConfirm }: Pric
       if (state.selectedHomePhoneService) summaryParts.push(state.selectedHomePhoneService.name);
       summaryParts.push(`£${monthlyTotal.toFixed(2)}/mo`);
 
-      await addBroadbandServiceToCart(plan, crypto.randomUUID(), summaryParts.join(' · '));
+      await addBroadbandServiceToCart(plan, crypto.randomUUID(), summaryParts.join(' · '), monthlyTotal);
       setConfirmed(true);
       onOrderConfirm();
     } catch {

@@ -85,7 +85,7 @@ interface CartContextType {
     payMonthlyTotal: number;
     deviceDiscount: number;
     broadbandDiscount: number;
-    addBroadbandServiceToCart: (plan: BroadbandPlan, userSelectionId: string, displaySummary?: string) => Promise<void>;
+    addBroadbandServiceToCart: (plan: BroadbandPlan, userSelectionId: string, displaySummary?: string, monthlyTotal?: number) => Promise<void>;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -308,13 +308,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
         setAppliedBroadbandVoucher(null);
     };
 
-    const addBroadbandServiceToCart = async (plan: BroadbandPlan, userSelectionId: string, displaySummary?: string) => {
-        const summary = displaySummary ?? `${plan.downloadSpeedMbps}Mbps / ${plan.uploadSpeedMbps}Mbps · ${plan.technologyType} · £${plan.monthlyPrice}/mo`;
+    const addBroadbandServiceToCart = async (plan: BroadbandPlan, userSelectionId: string, displaySummary?: string, monthlyTotal?: number) => {
+        const effectivePrice = monthlyTotal ?? plan.monthlyPrice;
+        const summary = displaySummary ?? `${plan.downloadSpeedMbps}Mbps / ${plan.uploadSpeedMbps}Mbps · ${plan.technologyType} · £${effectivePrice}/mo`;
         const broadbandItem: CartItem = {
             product: {
                 id: `broadband-${plan.planId}`,
                 name: plan.name,
-                price: plan.monthlyPrice,
+                price: effectivePrice,
                 category: 'broadband',
                 description: summary,
                 image: '',
@@ -325,21 +326,21 @@ export function CartProvider({ children }: { children: ReactNode }) {
             broadband_ref: userSelectionId,
             display_name: plan.name,
             display_summary: summary,
-            unit_price: plan.monthlyPrice,
+            unit_price: effectivePrice,
         };
 
         try {
             await apiClient.addBroadbandServiceToCart(SESSION_ID, {
                 itemId: broadbandItem.product.id,
                 name: plan.name,
-                price: plan.monthlyPrice,
+                price: effectivePrice,
                 quantity: 1,
                 item_type: 'broadband_service',
                 fulfillment_type: 'installation',
                 broadband_ref: userSelectionId,
                 display_name: plan.name,
                 display_summary: summary,
-                unit_price: plan.monthlyPrice,
+                unit_price: effectivePrice,
             });
 
             // Replace any existing broadband service item — only one at a time
