@@ -36,6 +36,10 @@ export default function CheckoutPage() {
   const [appointments, setAppointments] = useState<Record<string, Appointment>>({});
   const [aboutSaving, setAboutSaving] = useState(false);
 
+  // Snapshot broadband discount before cart items are removed on booking
+  const [savedBroadbandDiscount, setSavedBroadbandDiscount] = useState<number | undefined>(undefined);
+  const [savedDiscountedMonthlyTotal, setSavedDiscountedMonthlyTotal] = useState<number | undefined>(undefined);
+
   // Cancel modal
   const [cancelTarget, setCancelTarget] = useState<'devices' | 'broadband' | null>(null);
 
@@ -134,6 +138,11 @@ export default function CheckoutPage() {
       // Remove broadband items from cart once all are booked
       const allBooked = Object.values(updatedStatus).every(v => v !== 'unbooked');
       if (allBooked) {
+        // Snapshot discount values before cart removal wipes them
+        if (broadbandDiscount > 0) {
+          setSavedBroadbandDiscount(broadbandDiscount);
+          setSavedDiscountedMonthlyTotal(payMonthlyTotal);
+        }
         for (const item of items.filter(i => i.item_type === 'broadband_service')) {
           removeFromCart(item.product.id);
         }
@@ -322,8 +331,8 @@ export default function CheckoutPage() {
                 appointments={appointments}
                 onBook={handleBookAppointment}
                 onCancel={handleCancelBroadbandItem}
-                discountedMonthlyTotal={appliedBroadbandVoucher && broadbandDiscount > 0 ? payMonthlyTotal : undefined}
-                broadbandDiscount={broadbandDiscount}
+                discountedMonthlyTotal={savedDiscountedMonthlyTotal ?? (appliedBroadbandVoucher && broadbandDiscount > 0 ? payMonthlyTotal : undefined)}
+                broadbandDiscount={savedBroadbandDiscount ?? broadbandDiscount}
               />
             )}
           </div>
