@@ -19,7 +19,7 @@ interface AboutYou {
 }
 
 export default function CheckoutPage() {
-  const { removeFromCart, items, payMonthlyTotal, broadbandDiscount, appliedBroadbandVoucher } = useCart();
+  const { removeFromCart, items, payMonthlyTotal, payTodayTotal, broadbandDiscount, deviceDiscount, appliedBroadbandVoucher, appliedDeviceVoucher } = useCart();
   const router = useRouter();
 
   const [session, setSession] = useState<CheckoutSession | null>(null);
@@ -323,6 +323,9 @@ export default function CheckoutPage() {
                 devicePaid={devicePaid}
                 onPay={handlePay}
                 onCancel={() => setCancelTarget('devices')}
+                discountedTotal={appliedDeviceVoucher && deviceDiscount > 0 ? payTodayTotal : undefined}
+                deviceDiscount={deviceDiscount}
+                voucherName={appliedDeviceVoucher?.promotionName}
               />
             )}
             {session.hasBroadbandService && (

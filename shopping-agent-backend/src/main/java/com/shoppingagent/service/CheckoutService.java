@@ -57,6 +57,8 @@ public class CheckoutService {
             String displayName = row.display_name;
             String displaySummary = row.display_summary;
             double unitPrice = row.unit_price != null ? row.unit_price : 0.0;
+            Double originalPrice = null;
+            String promotionalLabel = null;
 
             // Regular product items don't store display_name/unit_price — look them up
             if (!"broadband_service".equals(row.item_type) && row.product_id != null
@@ -78,6 +80,8 @@ public class CheckoutService {
                                 .filter(promo -> promo.isActive() && promo.getPromoCode() == null)
                                 .findFirst();
                         if (activePromo.isPresent()) {
+                            originalPrice = p.price;
+                            promotionalLabel = activePromo.get().getPromotionalLabel();
                             unitPrice = com.shoppingagent.util.DiscountCalculator.calculateDiscountedPrice(
                                     p.price, activePromo.get().getDiscountType(), activePromo.get().getDiscountValue());
                         }
@@ -91,7 +95,8 @@ public class CheckoutService {
                     row.id,
                     row.item_type != null ? row.item_type : "device",
                     row.fulfillment_type != null ? row.fulfillment_type : "shipping",
-                    displayName, displaySummary, unitPrice, row.quantity);
+                    displayName, displaySummary, unitPrice, row.quantity,
+                    originalPrice, promotionalLabel);
 
             if ("broadband_service".equals(row.item_type)) {
                 serviceItems.add(item);

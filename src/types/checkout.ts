@@ -15,6 +15,8 @@ export interface CheckoutCartItem {
   displaySummary?: string;
   unitPrice: number;
   quantity: number;
+  originalPrice?: number;
+  promotionalLabel?: string;
 }
 
 export interface CustomerDetails {

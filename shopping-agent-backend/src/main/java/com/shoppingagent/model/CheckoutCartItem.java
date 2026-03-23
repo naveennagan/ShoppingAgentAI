@@ -15,4 +15,6 @@ public class CheckoutCartItem {
     private String displaySummary;
     private double unitPrice;
     private int quantity;
+    private Double originalPrice;
+    private String promotionalLabel;
 }
