@@ -88,7 +88,7 @@ class AppointmentBookingRoundTripProperties {
         when(supabaseClient.get(eq("appointments"), anyString())).thenReturn(getResponse);
 
         // Book the slot
-        AppointmentRequest request = new AppointmentRequest(sessionId, preferredDate, timeSlot, null);
+        AppointmentRequest request = new AppointmentRequest(sessionId, preferredDate, timeSlot, null, null);
         Appointment booked = service.bookSlot(request, orderId);
 
         // Retrieve by ID
@@ -124,7 +124,7 @@ class AppointmentBookingRoundTripProperties {
                 apptId, orderId, preferredDate, timeSlot);
         when(supabaseClient.post(eq("appointments"), anyString())).thenReturn(postResponse);
 
-        AppointmentRequest request = new AppointmentRequest(sessionId, preferredDate, timeSlot, null);
+        AppointmentRequest request = new AppointmentRequest(sessionId, preferredDate, timeSlot, null, null);
         Appointment booked = service.bookSlot(request, orderId);
 
         assertThat(booked.getStatus()).isEqualTo("pending");
@@ -163,7 +163,7 @@ class AppointmentBookingRoundTripProperties {
                 apptId, orderId, preferredDate, timeSlot);
         when(supabaseClient.get(eq("appointments"), anyString())).thenReturn(getResponse);
 
-        AppointmentRequest request = new AppointmentRequest(sessionId, preferredDate, timeSlot, null);
+        AppointmentRequest request = new AppointmentRequest(sessionId, preferredDate, timeSlot, null, null);
         Appointment booked = service.bookSlot(request, orderId);
         Appointment retrieved = service.getAppointmentById(booked.getAppointmentId());
 

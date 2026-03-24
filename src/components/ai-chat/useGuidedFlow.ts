@@ -713,8 +713,29 @@ export function useGuidedFlow() {
                     return true;
                 }
             }
-            // Not a plan name — send to AI but prevent it from adding to cart or showing broadband cards
-            await sendToAI(text, buildGuidedFlowContext() + '\nCRITICAL: Do NOT add any broadband plan to cart. Do NOT use add_broadband_to_cart action. Do NOT include broadband summaryCards. The user must click "Select Plan" on one of the displayed plan cards to select a plan. Answer their question helpfully and remind them to select a plan from the cards shown.');
+            // Detect user intent to select/add a plan (e.g. "ok add it", "add that", "yes", "select it")
+            const selectIntentPattern = /^(ok\s*)?(add|select|choose|pick|get|go with|take|yes|yep|yeah|sure|ok|okay|that one|the one you recommended|add it|select it|i('?ll| will) (take|go with|have|get)|sounds good|let'?s go|go ahead)/i;
+            if (selectIntentPattern.test(lower) && displayedPlans.length > 0) {
+                // Try to find the plan the AI most recently recommended by scanning the last AI message
+                const lastAiMsg = messages.slice().reverse().find(m => m.role === 'ai');
+                const lastAiText = lastAiMsg?.text?.toLowerCase() ?? '';
+                const recommendedPlan = displayedPlans.find(p => lastAiText.includes(p.name.toLowerCase()));
+                if (recommendedPlan) {
+                    await handlePlanStep(recommendedPlan);
+                    return true;
+                }
+                // AI didn't recommend a specific plan — let AI ask the user which one they want
+                await sendToAI(text, buildGuidedFlowContext() + `\nThe user wants to select a plan but hasn't specified which one. Here are the available plans: ${displayedPlans.map(p => `${p.name} (${p.downloadSpeedMbps}Mbps, £${p.monthlyPrice.toFixed(2)}/mo, ${p.contractLengthMonths}mo contract)`).join('; ')}. Ask them which plan they'd like to go with. Do NOT include broadband summaryCards.`);
+                return true;
+            }
+            // Detect recommendation request (e.g. "which one do you recommend", "what's the best plan")
+            const recommendPattern = /\b(recommend|suggest|best|which one|what should|what do you think|your pick|your choice)\b/i;
+            if (recommendPattern.test(lower) && displayedPlans.length > 0) {
+                await sendToAI(text, buildGuidedFlowContext() + `\nThe user is asking for a recommendation. Here are the available plans: ${displayedPlans.map(p => `${p.name} (${p.downloadSpeedMbps}Mbps, £${p.monthlyPrice.toFixed(2)}/mo, ${p.contractLengthMonths}mo contract)`).join('; ')}. Recommend the best value plan and explain why. Do NOT include broadband summaryCards.`);
+                return true;
+            }
+            // Not a plan name or selection intent — send to AI
+            await sendToAI(text, buildGuidedFlowContext() + '\nCRITICAL: If the user is asking to add or select a broadband plan, respond with the plan name they likely want based on the conversation. Do NOT include broadband summaryCards. Answer their question helpfully and guide them to select a plan.');
             return true;
         }
 
@@ -891,8 +912,53 @@ export function useGuidedFlow() {
 
         if (flow.currentStep === 'summary') {
             if (lower === 'add to cart' && flow.selectedPlan) {
-                await addBroadbandServiceToCart(flow.selectedPlan, flow.selectedPlan.planId);
-                addAiMessage('Your broadband plan has been added to the cart! Is there anything else I can help with?');
+                const plan = flow.selectedPlan;
+                const addonIds = flow.selectedAddons ?? [];
+                let addonTotal = 0;
+                const extras: string[] = [];
+
+                // Resolve add-ons
+                const lastAddonsMsg = messages.slice().reverse().find((m: any) => m._guidedAddons);
+                const allAddons: BroadbandAddon[] = (lastAddonsMsg as any)?._guidedAddons ?? [];
+                for (const id of addonIds) {
+                    const addon = allAddons.find(a => a.id === id || `Add ${a.name} (£${a.monthlyPrice.toFixed(2)}/mo)` === id);
+                    if (addon) { addonTotal += addon.monthlyPrice; extras.push(`${addon.name} £${addon.monthlyPrice.toFixed(2)}/mo`); }
+                }
+
+                // Resolve TV package
+                let tvTotal = 0;
+                if (flow.selectedTvPackageId) {
+                    const tvMsg = messages.slice().reverse().find((m: any) => m._guidedTvPackages);
+                    const tvPkgs: TvPackage[] = (tvMsg as any)?._guidedTvPackages ?? [];
+                    const tv = tvPkgs.find(p => p.id === flow.selectedTvPackageId);
+                    if (tv) { tvTotal = tv.monthlyPrice; extras.push(`TV: ${tv.name}${tv.monthlyPrice > 0 ? ` £${tv.monthlyPrice.toFixed(2)}/mo` : ''}`); }
+                }
+
+                // Resolve SIM plan
+                let simTotal = 0;
+                if (flow.selectedSimPlanId) {
+                    const simMsg = messages.slice().reverse().find((m: any) => m._guidedSimPlans);
+                    const simPlans: SimPlan[] = (simMsg as any)?._guidedSimPlans ?? [];
+                    const sim = simPlans.find(p => p.id === flow.selectedSimPlanId);
+                    if (sim) { simTotal = sim.monthlyPrice; extras.push(`SIM: ${sim.name} £${sim.monthlyPrice.toFixed(2)}/mo`); }
+                }
+
+                // Resolve home phone
+                let phoneTotal = 0;
+                if (flow.selectedHomePhoneId) {
+                    const phoneMsg = messages.slice().reverse().find((m: any) => m._guidedHomePhoneServices);
+                    const phoneServices: HomePhoneService[] = (phoneMsg as any)?._guidedHomePhoneServices ?? [];
+                    const phone = phoneServices.find(s => s.id === flow.selectedHomePhoneId);
+                    if (phone) { phoneTotal = phone.monthlyPrice; extras.push(`Phone: ${phone.name}${phone.monthlyPrice > 0 ? ` £${phone.monthlyPrice.toFixed(2)}/mo` : ''}`); }
+                }
+
+                const totalMonthly = plan.monthlyPrice + addonTotal + tvTotal + simTotal + phoneTotal;
+                const summaryParts = [`${plan.downloadSpeedMbps}Mbps / ${plan.uploadSpeedMbps}Mbps · ${plan.contractLengthMonths}mo`];
+                if (extras.length > 0) summaryParts.push(extras.join(' · '));
+                summaryParts.push(`£${totalMonthly.toFixed(2)}/mo`);
+
+                await addBroadbandServiceToCart(plan, plan.planId, summaryParts.join(' · '), totalMonthly);
+                addAiMessage('Your broadband bundle has been added to the cart! Is there anything else I can help with?');
                 setGuidedFlow(INITIAL_GUIDED_FLOW_STATE);
                 return true;
             }

@@ -207,7 +207,7 @@ class CheckoutServiceTest {
     @Test
     void bookAppointment_whenNoBroadbandService_throwsRuntimeException() {
         String sessionId = "sess-no-broadband";
-        AppointmentRequest request = new AppointmentRequest(sessionId, "2025-08-01", "09:00-11:00", "item-99");
+        AppointmentRequest request = new AppointmentRequest(sessionId, "2025-08-01", "09:00-11:00", "item-99", null);
 
         when(supabaseClient.get(eq("checkout_sessions"), anyString()))
                 .thenReturn("[{\"has_broadband_service\":false}]");
@@ -220,7 +220,7 @@ class CheckoutServiceTest {
     @Test
     void bookAppointment_whenNoSessionFound_throwsRuntimeException() {
         String sessionId = "sess-missing";
-        AppointmentRequest request = new AppointmentRequest(sessionId, "2025-08-01", "14:00-16:00", "item-99");
+        AppointmentRequest request = new AppointmentRequest(sessionId, "2025-08-01", "14:00-16:00", "item-99", null);
 
         when(supabaseClient.get(eq("checkout_sessions"), anyString())).thenReturn("[]");
 
@@ -232,7 +232,7 @@ class CheckoutServiceTest {
     @Test
     void bookAppointment_whenBroadbandItemNotFound_throwsRuntimeException() {
         String sessionId = "sess-bb";
-        AppointmentRequest request = new AppointmentRequest(sessionId, "2025-08-01", "morning", "item-nonexistent");
+        AppointmentRequest request = new AppointmentRequest(sessionId, "2025-08-01", "morning", "item-nonexistent", null);
 
         when(supabaseClient.get(eq("checkout_sessions"), anyString()))
                 .thenReturn("[{\"has_broadband_service\":true}]");
@@ -247,7 +247,7 @@ class CheckoutServiceTest {
     @Test
     void bookAppointment_whenAlreadyBooked_throwsRuntimeException() {
         String sessionId = "sess-bb";
-        AppointmentRequest request = new AppointmentRequest(sessionId, "2025-08-01", "morning", "item-10");
+        AppointmentRequest request = new AppointmentRequest(sessionId, "2025-08-01", "morning", "item-10", null);
 
         when(supabaseClient.get(eq("checkout_sessions"), anyString()))
                 .thenReturn("[{\"has_broadband_service\":true}]");
@@ -264,7 +264,7 @@ class CheckoutServiceTest {
     @Test
     void bookAppointment_happyPath_createsOrderAndAppointmentPerItem() {
         String sessionId = "sess-bb";
-        AppointmentRequest request = new AppointmentRequest(sessionId, "2025-08-15", "afternoon", "item-20");
+        AppointmentRequest request = new AppointmentRequest(sessionId, "2025-08-15", "afternoon", "item-20", null);
 
         when(supabaseClient.get(eq("checkout_sessions"), anyString()))
                 .thenReturn("[{\"has_broadband_service\":true,\"customer_address\":\"42 Test Street\"}]");

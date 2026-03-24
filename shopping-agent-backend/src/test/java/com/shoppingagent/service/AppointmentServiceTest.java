@@ -99,7 +99,7 @@ class AppointmentServiceTest {
                 """;
         when(supabaseClient.post(eq("appointments"), anyString())).thenReturn(postResponse);
 
-        AppointmentRequest request = new AppointmentRequest("sess-1", "2025-08-01", "morning", null);
+        AppointmentRequest request = new AppointmentRequest("sess-1", "2025-08-01", "morning", null, null);
         Appointment result = appointmentService.bookSlot(request, "order-1");
 
         assertThat(result.getAppointmentId()).isEqualTo("appt-1");
@@ -113,7 +113,7 @@ class AppointmentServiceTest {
     void bookSlot_throwsWhenPostReturnsEmpty() {
         when(supabaseClient.post(eq("appointments"), anyString())).thenReturn("[]");
 
-        AppointmentRequest request = new AppointmentRequest("sess-1", "2025-08-01", "morning", null);
+        AppointmentRequest request = new AppointmentRequest("sess-1", "2025-08-01", "morning", null, null);
 
         assertThatThrownBy(() -> appointmentService.bookSlot(request, "order-1"))
                 .isInstanceOf(RuntimeException.class);

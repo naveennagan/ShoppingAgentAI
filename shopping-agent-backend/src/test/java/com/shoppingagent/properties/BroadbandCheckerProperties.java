@@ -134,7 +134,7 @@ class BroadbandCheckerProperties {
 
         return Combinators.combine(ids, names, prices, quantities)
                 .as((id, name, price, qty) ->
-                        new CheckoutCartItem(id, "device", "shipping", name, null, price, qty));
+                        new CheckoutCartItem(id, "device", "shipping", name, null, price, qty, null, null));
     }
 
     @Provide
@@ -146,7 +146,7 @@ class BroadbandCheckerProperties {
 
         return Combinators.combine(ids, names, prices)
                 .as((id, name, price) ->
-                        new CheckoutCartItem(id, "broadband_service", "installation", name, null, price, 1));
+                        new CheckoutCartItem(id, "broadband_service", "installation", name, null, price, 1, null, null));
     }
 
     @Provide
@@ -539,7 +539,7 @@ class BroadbandCheckerProperties {
         CheckoutService service = new CheckoutService(stubClient, null);
 
         com.shoppingagent.model.AppointmentRequest request =
-                new com.shoppingagent.model.AppointmentRequest(sessionId, "2025-01-01", "morning", null);
+                new com.shoppingagent.model.AppointmentRequest(sessionId, "2025-01-01", "morning", null, null);
 
         boolean exceptionThrown = false;
         try {
