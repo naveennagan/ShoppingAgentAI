@@ -27,7 +27,7 @@ export function useGuidedFlow() {
     useEffect(() => { guidedFlowRef.current = guidedFlow; }, [guidedFlow]);
 
     const router = useRouter();
-    const { addToCart, clearCart, updateQuantity, removeFromCart, items: cart, applyCoupon, removeCoupon, appliedCoupon, addBroadbandServiceToCart, applyDeviceVoucher, applyBroadbandVoucher } = useCart();
+    const { addToCart, clearCart, updateQuantity, removeFromCart, items: cart, applyCoupon, removeCoupon, appliedCoupon, addBroadbandServiceToCart, applyDeviceVoucher, applyBroadbandVoucher, appliedDeviceVoucher, appliedBroadbandVoucher } = useCart();
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     // Listen for broadband plans loaded on the broadband page
@@ -43,8 +43,9 @@ export function useGuidedFlow() {
 
     const isGuidedFlowTrigger = (text: string): boolean => {
         const lower = text.toLowerCase();
-        // Don't trigger guided flow for coupon/voucher/deal queries that mention broadband
+        // Don't trigger guided flow for coupon/voucher/deal/apply queries that mention broadband
         if (/vouchers?|coupons?|promos?|promotions?|discounts?|deals?/.test(lower)) return false;
+        if (/\bapply\b/.test(lower)) return false;
         if (GUIDED_FLOW_TRIGGERS.some(trigger => lower.includes(trigger))) return true;
         if (/\bbroadband\b/.test(lower) && !lower.includes('cancel')) return true;
         return false;
@@ -579,8 +580,10 @@ export function useGuidedFlow() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 message: messageWithContext, history,
-                cartItems: cart.map(i => ({ productId: i.product.id, name: i.product.name, price: i.product.price, quantity: i.quantity })),
+                cartItems: cart.map(i => ({ productId: i.product.id, name: i.product.name, price: i.product.price, quantity: i.quantity, itemType: i.item_type === 'broadband_service' ? 'broadband' : 'device' })),
                 appliedCouponCode: appliedCoupon?.promotionName ?? null,
+                appliedDeviceCoupon: appliedDeviceVoucher?.promotionName ?? null,
+                appliedBroadbandCoupon: appliedBroadbandVoucher?.promotionName ?? null,
                 broadbandPlans: broadbandPlans.length > 0 ? broadbandPlans : undefined
             })
         });
@@ -628,7 +631,7 @@ export function useGuidedFlow() {
             suggestedActions: suggestedActions.length > 0 ? suggestedActions : undefined,
         }]);
         return false;
-    }, [messages, cart, appliedCoupon, broadbandPlans]);
+    }, [messages, cart, appliedCoupon, appliedDeviceVoucher, appliedBroadbandVoucher, broadbandPlans]);
 
     // ── Guided flow message processor ───────────────────────────────────
 
@@ -657,6 +660,16 @@ export function useGuidedFlow() {
         }
         if (isCheckAppointmentQuery(lower)) { await handleCheckAppointment(); return true; }
         if (isInstallationQuery(lower)) { await handleInstallationQuery(); return true; }
+
+        // If the user is clearly asking about something unrelated to broadband (e.g. products, coupons),
+        // auto-cancel the guided flow and let the message be processed normally.
+        const nonBroadbandIntent = /\b(show|find|search|get|buy|add)\b.*(iphone|phone|laptop|tablet|headphone|watch|camera|speaker|product)/i.test(lower)
+            || /vouchers?|coupons?|promos?|promotions?|discounts?|deals?/.test(lower)
+            || /\b(what('?s| is) in my cart|show my cart|clear cart|go to checkout)\b/i.test(lower);
+        if (nonBroadbandIntent) {
+            setGuidedFlow(INITIAL_GUIDED_FLOW_STATE);
+            return false; // Let sendMessage handle it normally
+        }
 
         // Step-specific handling
         if (flow.currentStep === 'postcode') {
@@ -1151,15 +1164,18 @@ export function useGuidedFlow() {
         setIsTyping(true);
         try {
             const history = messages.slice(-10).map(m => ({ role: m.role === 'user' ? 'user' : 'ai', text: m.text }));
+            const chatBody = {
+                message: text, history,
+                cartItems: cart.map(i => ({ productId: i.product.id, name: i.product.name, price: i.product.price, quantity: i.quantity, itemType: i.item_type === 'broadband_service' ? 'broadband' : 'device' })),
+                appliedCouponCode: appliedCoupon?.promotionName ?? null,
+                appliedDeviceCoupon: appliedDeviceVoucher?.promotionName ?? null,
+                appliedBroadbandCoupon: appliedBroadbandVoucher?.promotionName ?? null,
+                broadbandPlans: broadbandPlans.length > 0 ? broadbandPlans : undefined
+            };
             const res = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    message: text, history,
-                    cartItems: cart.map(i => ({ productId: i.product.id, name: i.product.name, price: i.product.price, quantity: i.quantity })),
-                    appliedCouponCode: appliedCoupon?.promotionName ?? null,
-                    broadbandPlans: broadbandPlans.length > 0 ? broadbandPlans : undefined
-                })
+                body: JSON.stringify(chatBody)
             });
             const data = await res.json();
 
@@ -1191,15 +1207,23 @@ export function useGuidedFlow() {
                 } else if (act.action === 'autofill_checkout') {
                     window.dispatchEvent(new CustomEvent('autofill-checkout', { detail: act.payload || {} }));
                     setTimeout(() => router.push('/checkout'), 100);
-                } else if (act.action === 'apply_coupon' && act.payload?.code) {
+                } else if (act.action === 'apply_coupon') {
                     try {
-                        const itemType = act.payload.itemType;
-                        if (itemType === 'broadband') {
-                            await applyBroadbandVoucher(act.payload.code);
-                        } else if (itemType === 'device') {
-                            await applyDeviceVoucher(act.payload.code);
-                        } else {
-                            await applyCoupon(act.payload.code);
+                        // Handle array payload: [{code, itemType}, ...]
+                        const payloads = Array.isArray(act.payload) ? act.payload : act.payload?.code ? [act.payload] : [];
+                        for (const p of payloads) {
+                            if (!p.code) continue;
+                            const itemType = p.itemType;
+                            if (itemType === 'broadband') {
+                                await applyBroadbandVoucher(p.code);
+                            } else if (itemType === 'device') {
+                                await applyDeviceVoucher(p.code);
+                            } else if (itemType === 'both') {
+                                await applyDeviceVoucher(p.code);
+                                await applyBroadbandVoucher(p.code);
+                            } else {
+                                await applyCoupon(p.code);
+                            }
                         }
                     } catch (err) {
                         const msg = err instanceof Error ? err.message : 'Failed to apply coupon';
@@ -1226,7 +1250,7 @@ export function useGuidedFlow() {
         } finally {
             setIsTyping(false);
         }
-    }, [processGuidedFlowMessage, startGuidedFlow, pendingSlots, handleSlotSelection, handleCheckAppointment, handleInstallationQuery, messages, cart, appliedCoupon, broadbandPlans, router, addToCart, clearCart, updateQuantity, removeFromCart, applyCoupon, removeCoupon, addBroadbandServiceToCart]);
+    }, [processGuidedFlowMessage, startGuidedFlow, pendingSlots, handleSlotSelection, handleCheckAppointment, handleInstallationQuery, messages, cart, appliedCoupon, appliedDeviceVoucher, appliedBroadbandVoucher, broadbandPlans, router, addToCart, clearCart, updateQuantity, removeFromCart, applyCoupon, removeCoupon, addBroadbandServiceToCart, applyDeviceVoucher, applyBroadbandVoucher]);
 
     return {
         messages, isTyping, showQuickActions, messagesEndRef, cart,

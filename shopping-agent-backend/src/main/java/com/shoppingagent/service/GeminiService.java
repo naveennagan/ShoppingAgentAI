@@ -38,7 +38,7 @@ public class GeminiService {
                 return new ChatResponse("NONE", null, "API Key not configured");
             }
             
-            String systemPrompt = buildSystemPrompt(request.getCartItems(), request.getAppliedCouponCode());
+            String systemPrompt = buildSystemPrompt(request.getCartItems(), request.getAppliedDeviceCoupon(), request.getAppliedBroadbandCoupon());
             String requestBody = buildRequestBody(systemPrompt, request);
             
 //            System.out.println("Request Body: " + requestBody);
@@ -80,8 +80,8 @@ public class GeminiService {
             }
 
             String systemPrompt = (ragContext != null)
-                    ? buildRagSystemPrompt(ragContext, request.getCartItems(), request.getAppliedCouponCode())
-                    : buildSystemPrompt(request.getCartItems(), request.getAppliedCouponCode());
+                    ? buildRagSystemPrompt(ragContext, request.getCartItems(), request.getAppliedDeviceCoupon(), request.getAppliedBroadbandCoupon())
+                    : buildSystemPrompt(request.getCartItems(), request.getAppliedDeviceCoupon(), request.getAppliedBroadbandCoupon());
             String requestBody = buildRequestBody(systemPrompt, request);
 
             HttpClient client = HttpClient.newBuilder()
@@ -113,28 +113,56 @@ public class GeminiService {
         }
     }
     
-    private String buildRagSystemPrompt(RagContext ragContext, List<ChatRequest.CartItem> cartItems, String appliedCouponCode) {
+    private String buildRagSystemPrompt(RagContext ragContext, List<ChatRequest.CartItem> cartItems, String appliedDeviceCoupon, String appliedBroadbandCoupon) {
         StringBuilder prompt = new StringBuilder();
         prompt.append("You are an AI Shopping Assistant for \"AI.Shop\". ")
               .append("Your goal is to help users find products, navigate the site, and manage their cart.\n\n")
               .append("RELEVANT CONTEXT:\n").append(ragContext.getContextWindow()).append("\n\n");
 
-        // Include cart context when available
+        // Include cart context when available, grouped by type
         if (cartItems != null && !cartItems.isEmpty()) {
+            List<ChatRequest.CartItem> deviceItems = cartItems.stream()
+                    .filter(i -> !"broadband".equals(i.getItemType()))
+                    .collect(java.util.stream.Collectors.toList());
+            List<ChatRequest.CartItem> broadbandItems = cartItems.stream()
+                    .filter(i -> "broadband".equals(i.getItemType()))
+                    .collect(java.util.stream.Collectors.toList());
+
             prompt.append("CURRENT CART:\n");
-            for (ChatRequest.CartItem item : cartItems) {
-                prompt.append("- ").append(item.getName())
-                      .append(" (ID: ").append(item.getProductId())
-                      .append(", Price: $").append(String.format("%.2f", item.getPrice()))
-                      .append(", Qty: ").append(item.getQuantity()).append(")\n");
+            if (!deviceItems.isEmpty()) {
+                prompt.append("Devices (pay today):\n");
+                for (ChatRequest.CartItem item : deviceItems) {
+                    prompt.append("- ").append(item.getName())
+                          .append(" (ID: ").append(item.getProductId())
+                          .append(", Price: £").append(String.format("%.2f", item.getPrice()))
+                          .append(", Qty: ").append(item.getQuantity()).append(")\n");
+                }
+            }
+            if (!broadbandItems.isEmpty()) {
+                prompt.append("Broadband (monthly):\n");
+                for (ChatRequest.CartItem item : broadbandItems) {
+                    prompt.append("- ").append(item.getName())
+                          .append(" (ID: ").append(item.getProductId())
+                          .append(", Price: £").append(String.format("%.2f", item.getPrice()))
+                          .append("/mo, Qty: ").append(item.getQuantity()).append(")\n");
+                }
             }
             prompt.append("\n");
         } else {
             prompt.append("CURRENT CART: empty\n\n");
         }
-        if (appliedCouponCode != null && !appliedCouponCode.isEmpty()) {
-            prompt.append("APPLIED COUPON: ").append(appliedCouponCode).append("\n\n");
+        prompt.append("APPLIED COUPONS:\n");
+        if (appliedDeviceCoupon != null && !appliedDeviceCoupon.isEmpty()) {
+            prompt.append("- Device coupon: ").append(appliedDeviceCoupon).append("\n");
+        } else {
+            prompt.append("- Device coupon: none\n");
         }
+        if (appliedBroadbandCoupon != null && !appliedBroadbandCoupon.isEmpty()) {
+            prompt.append("- Broadband coupon: ").append(appliedBroadbandCoupon).append("\n");
+        } else {
+            prompt.append("- Broadband coupon: none\n");
+        }
+        prompt.append("\n");
 
         prompt.append(buildPromotionsContext());
 
@@ -149,7 +177,7 @@ public class GeminiService {
                "RESPONSE FORMAT:\n" +
                "You MUST respond with a JSON object containing:\n" +
                "{\"action\": \"NAVIGATE\" | \"ADD_TO_CART\" | \"CLEAR_CART\" | \"SHOW_PRODUCTS\" | \"APPLY_COUPON\" | \"REMOVE_COUPON\" | \"ADVANCE_STEP\" | \"NONE\", " +
-               "\"payload\": \"URL path\" | \"Product ID\" | \"Comma-separated Product IDs\" | {\"code\": \"PROMO_CODE\", \"itemType\": \"device\" | \"broadband\"} | null, " +
+               "\"payload\": \"URL path\" | \"Product ID\" | \"Comma-separated Product IDs\" | {\"code\": \"PROMO_CODE\", \"itemType\": \"device\" | \"broadband\" | \"both\"} | null, " +
                "\"message\": \"Helpful response to user\", " +
                "\"summaryCards\": [{\"type\": \"product\" | \"broadband\", \"id\": \"UUID\", \"name\": \"...\", \"price\": 0.0, \"brand\": \"...\", \"rating\": 0.0, " +
                "\"downloadSpeed\": \"...\", \"uploadSpeed\": \"...\", \"monthlyPrice\": 0.0, \"contractLength\": \"...\", \"promotionalLabel\": \"...\"}], " +
@@ -161,9 +189,9 @@ public class GeminiService {
                "- When listing coupons, format each one on its own line as a numbered list. Each item MUST be on a separate line. Example:\n" +
                "1. WELCOME20 — £20 off your first phone purchase\n" +
                "2. DEVICE10 — 10% off device purchases\n" +
-               "- When the user asks to apply a coupon code, use action APPLY_COUPON with payload {\"code\": \"THE_CODE\", \"itemType\": \"device\" or \"broadband\"}. Set itemType based on what the coupon's 'Applies to' field says. If 'both', use the item type the user is targeting.\n" +
+               "- When the user asks to apply a coupon code, use action APPLY_COUPON with payload {\"code\": \"THE_CODE\", \"itemType\": \"device\" | \"broadband\" | \"both\"}. Set itemType based on what the user wants. Use \"both\" when the user wants to apply to both device and broadband.\n" +
                "- When the user asks to remove a coupon, use action REMOVE_COUPON.\n" +
-               "- If a coupon is already applied (see APPLIED COUPON above), mention it when relevant.\n" +
+               "- If a coupon is already applied (see APPLIED COUPONS above), tell the user which slot (device/broadband) it's on. A coupon applied to devices does NOT automatically apply to broadband, and vice versa.\n" +
                "- NEVER say you cannot apply coupons. You CAN list and apply them.\n\n" +
                "COMPARISON:\n" +
                "- When the user asks to compare 2-3 products, include a comparison field in the response.\n" +
@@ -195,6 +223,7 @@ public class GeminiService {
                "- Include relevant product IDs in payload as comma-separated string\n" +
                "- Never use NONE action for product display requests\n" +
                "- When the user asks about their cart contents and the CURRENT CART is empty, clearly tell them their cart is empty and suggest browsing products. Do NOT navigate to /cart or show checkout options for an empty cart.\n" +
+               "- When showing cart contents, ALWAYS separate devices and broadband. Show device items with 'Pay Today' total and broadband items with 'Monthly' total. NEVER add device and broadband prices together into a single total. Show applied coupons per category.\n" +
                "- If the user asks about broadband, fibre, internet plans, or anything broadband-related, DO NOT say you don't have broadband. Acknowledge what they are looking for and ask for their UK postcode so you can check broadband availability at their address. If a SYSTEM CONTEXT is provided about a broadband guided flow, follow those instructions.\n" +
                "- Use the source IDs from the RELEVANT CONTEXT when referencing products or plans\n" +
                "- ADVANCE_STEP: When a SYSTEM CONTEXT mentions a broadband guided flow step and the user clearly wants to skip, move on, proceed, or is done with the current optional step (add-ons, TV packages, SIM plans, home phone), use action ADVANCE_STEP. This tells the frontend to move to the next step. Include a brief friendly message acknowledging their choice.");
@@ -202,7 +231,7 @@ public class GeminiService {
         return prompt.toString();
     }
     
-    private String buildSystemPrompt(List<ChatRequest.CartItem> cartItems, String appliedCouponCode) {
+    private String buildSystemPrompt(List<ChatRequest.CartItem> cartItems, String appliedDeviceCoupon, String appliedBroadbandCoupon) {
         String productsJson = gson.toJson(productService.getAllProducts());
         StringBuilder prompt = new StringBuilder();
         prompt.append("You are an AI Shopping Assistant for \"AI.Shop\". ")
@@ -210,20 +239,48 @@ public class GeminiService {
               .append("AVAILABLE PRODUCTS:\n").append(productsJson).append("\n\n");
 
         if (cartItems != null && !cartItems.isEmpty()) {
+            List<ChatRequest.CartItem> deviceItems = cartItems.stream()
+                    .filter(i -> !"broadband".equals(i.getItemType()))
+                    .collect(java.util.stream.Collectors.toList());
+            List<ChatRequest.CartItem> broadbandItems = cartItems.stream()
+                    .filter(i -> "broadband".equals(i.getItemType()))
+                    .collect(java.util.stream.Collectors.toList());
+
             prompt.append("CURRENT CART:\n");
-            for (ChatRequest.CartItem item : cartItems) {
-                prompt.append("- ").append(item.getName())
-                      .append(" (ID: ").append(item.getProductId())
-                      .append(", Price: £").append(String.format("%.2f", item.getPrice()))
-                      .append(", Qty: ").append(item.getQuantity()).append(")\n");
+            if (!deviceItems.isEmpty()) {
+                prompt.append("Devices (pay today):\n");
+                for (ChatRequest.CartItem item : deviceItems) {
+                    prompt.append("- ").append(item.getName())
+                          .append(" (ID: ").append(item.getProductId())
+                          .append(", Price: £").append(String.format("%.2f", item.getPrice()))
+                          .append(", Qty: ").append(item.getQuantity()).append(")\n");
+                }
+            }
+            if (!broadbandItems.isEmpty()) {
+                prompt.append("Broadband (monthly):\n");
+                for (ChatRequest.CartItem item : broadbandItems) {
+                    prompt.append("- ").append(item.getName())
+                          .append(" (ID: ").append(item.getProductId())
+                          .append(", Price: £").append(String.format("%.2f", item.getPrice()))
+                          .append("/mo, Qty: ").append(item.getQuantity()).append(")\n");
+                }
             }
             prompt.append("\n");
         } else {
             prompt.append("CURRENT CART: empty\n\n");
         }
-        if (appliedCouponCode != null && !appliedCouponCode.isEmpty()) {
-            prompt.append("APPLIED COUPON: ").append(appliedCouponCode).append("\n\n");
+        prompt.append("APPLIED COUPONS:\n");
+        if (appliedDeviceCoupon != null && !appliedDeviceCoupon.isEmpty()) {
+            prompt.append("- Device coupon: ").append(appliedDeviceCoupon).append("\n");
+        } else {
+            prompt.append("- Device coupon: none\n");
         }
+        if (appliedBroadbandCoupon != null && !appliedBroadbandCoupon.isEmpty()) {
+            prompt.append("- Broadband coupon: ").append(appliedBroadbandCoupon).append("\n");
+        } else {
+            prompt.append("- Broadband coupon: none\n");
+        }
+        prompt.append("\n");
 
         prompt.append(buildPromotionsContext());
 
@@ -239,7 +296,7 @@ public class GeminiService {
                "RESPONSE FORMAT:\n" +
                "You MUST respond with a JSON object containing:\n" +
                "{\"action\": \"NAVIGATE\" | \"ADD_TO_CART\" | \"CLEAR_CART\" | \"SHOW_PRODUCTS\" | \"APPLY_COUPON\" | \"REMOVE_COUPON\" | \"ADVANCE_STEP\" | \"NONE\", " +
-               "\"payload\": \"URL path\" | \"Product ID\" | \"Comma-separated Product IDs\" | {\"code\": \"PROMO_CODE\", \"itemType\": \"device\" | \"broadband\"} | null, " +
+               "\"payload\": \"URL path\" | \"Product ID\" | \"Comma-separated Product IDs\" | {\"code\": \"PROMO_CODE\", \"itemType\": \"device\" | \"broadband\" | \"both\"} | null, " +
                "\"message\": \"Helpful response to user\"}\n\n" +
                "COUPON/PROMOTION RULES:\n" +
                "- Each coupon has an 'Applies to' field: 'device' (phones/laptops/etc), 'broadband', or 'both'.\n" +
@@ -247,7 +304,7 @@ public class GeminiService {
                "- When listing coupons, format each one on its own line as a numbered list. Each item MUST be on a separate line. Example:\n" +
                "1. WELCOME20 — £20 off your first phone purchase\n" +
                "2. DEVICE10 — 10% off device purchases\n" +
-               "- When the user asks to apply a coupon code, use action APPLY_COUPON with payload {\"code\": \"THE_CODE\", \"itemType\": \"device\" or \"broadband\"}. Set itemType based on what the coupon's 'Applies to' field says. If 'both', use the item type the user is targeting.\n" +
+               "- When the user asks to apply a coupon code, use action APPLY_COUPON with payload {\"code\": \"THE_CODE\", \"itemType\": \"device\" | \"broadband\" | \"both\"}. Set itemType based on what the user wants. Use \"both\" when the user wants to apply to both device and broadband.\n" +
                "- When the user asks to remove a coupon, use action REMOVE_COUPON.\n" +
                "- NEVER say you cannot apply coupons. You CAN list and apply them.\n\n" +
                "COMPARISON:\n" +
@@ -265,6 +322,7 @@ public class GeminiService {
                "- Include relevant product IDs in payload as comma-separated string\n" +
                "- Never use NONE action for product display requests\n" +
                "- When the user asks about their cart contents and the cart is empty, clearly tell them their cart is empty and suggest browsing products. Do NOT navigate to /cart or show checkout options for an empty cart.\n" +
+               "- When showing cart contents, ALWAYS separate devices and broadband. Show device items with 'Pay Today' total and broadband items with 'Monthly' total. NEVER add device and broadband prices together into a single total. Show applied coupons per category.\n" +
                "- If the user asks about broadband, fibre, internet plans, or anything broadband-related, DO NOT say you don't have broadband. Acknowledge what they are looking for and ask for their UK postcode so you can check broadband availability at their address. If a SYSTEM CONTEXT is provided about a broadband guided flow, follow those instructions.\n" +
                "- ADVANCE_STEP: When a SYSTEM CONTEXT mentions a broadband guided flow step and the user clearly wants to skip, move on, proceed, or is done with the current optional step (add-ons, TV packages, SIM plans, home phone), use action ADVANCE_STEP. This tells the frontend to move to the next step. Include a brief friendly message acknowledging their choice.");
         return prompt.toString();
@@ -273,14 +331,27 @@ public class GeminiService {
     private String buildRequestBody(String systemPrompt, ChatRequest request) {
         JsonObject body = new JsonObject();
         
-        // Build contents array properly
+        // Build contents array with conversation history
         StringBuilder contentsBuilder = new StringBuilder();
         contentsBuilder.append("[");
+        // System prompt as first user message
         contentsBuilder.append("{\"role\":\"user\",\"parts\":[{\"text\":\"");
         contentsBuilder.append(escapeJson(systemPrompt));
         contentsBuilder.append("\"}]},");
-        contentsBuilder.append("{\"role\":\"model\",\"parts\":[{\"text\":\"{\\\"action\\\":\\\"NONE\\\",\\\"payload\\\":null,\\\"message\\\":\\\"Ready\\\"}\"}]},");
-        contentsBuilder.append("{\"role\":\"user\",\"parts\":[{\"text\":\"");
+        contentsBuilder.append("{\"role\":\"model\",\"parts\":[{\"text\":\"{\\\"action\\\":\\\"NONE\\\",\\\"payload\\\":null,\\\"message\\\":\\\"Ready\\\"}\"}]}");
+
+        // Include conversation history
+        if (request.getHistory() != null && !request.getHistory().isEmpty()) {
+            for (ChatRequest.ChatMessage msg : request.getHistory()) {
+                String role = "user".equals(msg.getRole()) ? "user" : "model";
+                contentsBuilder.append(",{\"role\":\"").append(role).append("\",\"parts\":[{\"text\":\"");
+                contentsBuilder.append(escapeJson(msg.getText()));
+                contentsBuilder.append("\"}]}");
+            }
+        }
+
+        // Current message
+        contentsBuilder.append(",{\"role\":\"user\",\"parts\":[{\"text\":\"");
         contentsBuilder.append(escapeJson(request.getMessage()));
         contentsBuilder.append("\"}]}");
         contentsBuilder.append("]");

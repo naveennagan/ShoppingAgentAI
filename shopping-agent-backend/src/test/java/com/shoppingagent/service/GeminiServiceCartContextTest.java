@@ -90,6 +90,7 @@ class GeminiServiceCartContextTest {
         request.setMessage("Do I have a coupon?");
         request.setCartItems(Collections.emptyList());
         request.setAppliedCouponCode("SAVE20");
+        request.setAppliedDeviceCoupon("SAVE20");
 
         RagContext ragContext = new RagContext();
         ragContext.setContextWindow("Some context");
@@ -165,10 +166,10 @@ class GeminiServiceCartContextTest {
                 try {
                     // Invoke private buildRagSystemPrompt via reflection
                     java.lang.reflect.Method buildPrompt = GeminiService.class.getDeclaredMethod(
-                            "buildRagSystemPrompt", RagContext.class, List.class, String.class);
+                            "buildRagSystemPrompt", RagContext.class, List.class, String.class, String.class);
                     buildPrompt.setAccessible(true);
                     String systemPrompt = (String) buildPrompt.invoke(this, ragContext,
-                            request.getCartItems(), request.getAppliedCouponCode());
+                            request.getCartItems(), request.getAppliedDeviceCoupon(), request.getAppliedBroadbandCoupon());
 
                     java.lang.reflect.Method buildBody = GeminiService.class.getDeclaredMethod(
                             "buildRequestBody", String.class, ChatRequest.class);
