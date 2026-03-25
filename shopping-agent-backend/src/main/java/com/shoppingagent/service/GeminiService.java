@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.shoppingagent.model.ChatRequest;
 import com.shoppingagent.model.ChatResponse;
+import com.shoppingagent.model.Promotion;
 import com.shoppingagent.model.RagContext;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -23,10 +24,12 @@ public class GeminiService {
     private String model;
     
     private final ProductService productService;
+    private final PromotionService promotionService;
     private final Gson gson = new Gson();
     
-    public GeminiService(ProductService productService) {
+    public GeminiService(ProductService productService, PromotionService promotionService) {
         this.productService = productService;
+        this.promotionService = promotionService;
     }
     
     public ChatResponse chat(ChatRequest request) {
@@ -35,7 +38,7 @@ public class GeminiService {
                 return new ChatResponse("NONE", null, "API Key not configured");
             }
             
-            String systemPrompt = buildSystemPrompt();
+            String systemPrompt = buildSystemPrompt(request.getCartItems(), request.getAppliedCouponCode());
             String requestBody = buildRequestBody(systemPrompt, request);
             
 //            System.out.println("Request Body: " + requestBody);
@@ -78,7 +81,7 @@ public class GeminiService {
 
             String systemPrompt = (ragContext != null)
                     ? buildRagSystemPrompt(ragContext, request.getCartItems(), request.getAppliedCouponCode())
-                    : buildSystemPrompt();
+                    : buildSystemPrompt(request.getCartItems(), request.getAppliedCouponCode());
             String requestBody = buildRequestBody(systemPrompt, request);
 
             HttpClient client = HttpClient.newBuilder()
@@ -133,22 +136,35 @@ public class GeminiService {
             prompt.append("APPLIED COUPON: ").append(appliedCouponCode).append("\n\n");
         }
 
+        prompt.append(buildPromotionsContext());
+
         prompt.append("CAPABILITIES:\n").append(
                "- Search and recommend products based on user queries\n" +
                "- Add products to cart by ID\n" +
                "- Navigate to specific pages (/products, /cart, /checkout, /orders)\n" +
                "- Clear cart contents\n" +
                "- Autofill checkout with user data\n" +
-               "- Show user order history\n\n" +
+               "- Show user order history\n" +
+               "- List available coupons/promotions and apply or remove them\n\n" +
                "RESPONSE FORMAT:\n" +
                "You MUST respond with a JSON object containing:\n" +
-               "{\"action\": \"NAVIGATE\" | \"ADD_TO_CART\" | \"CLEAR_CART\" | \"SHOW_PRODUCTS\" | \"ADVANCE_STEP\" | \"NONE\", " +
-               "\"payload\": \"URL path\" | \"Product ID\" | \"Comma-separated Product IDs\" | null, " +
+               "{\"action\": \"NAVIGATE\" | \"ADD_TO_CART\" | \"CLEAR_CART\" | \"SHOW_PRODUCTS\" | \"APPLY_COUPON\" | \"REMOVE_COUPON\" | \"ADVANCE_STEP\" | \"NONE\", " +
+               "\"payload\": \"URL path\" | \"Product ID\" | \"Comma-separated Product IDs\" | {\"code\": \"PROMO_CODE\", \"itemType\": \"device\" | \"broadband\"} | null, " +
                "\"message\": \"Helpful response to user\", " +
                "\"summaryCards\": [{\"type\": \"product\" | \"broadband\", \"id\": \"UUID\", \"name\": \"...\", \"price\": 0.0, \"brand\": \"...\", \"rating\": 0.0, " +
                "\"downloadSpeed\": \"...\", \"uploadSpeed\": \"...\", \"monthlyPrice\": 0.0, \"contractLength\": \"...\", \"promotionalLabel\": \"...\"}], " +
                "\"suggestedActions\": [\"action label 1\", \"action label 2\"], " +
                "\"comparison\": {\"products\": [\"Name A\", \"Name B\"], \"rows\": [{\"field\": \"Price\", \"values\": [\"£x\", \"£y\"]}]}}\n\n" +
+               "COUPON/PROMOTION RULES:\n" +
+               "- Each coupon has an 'Applies to' field: 'device' (phones/laptops/etc), 'broadband', or 'both'.\n" +
+               "- When the user asks about coupons for their cart, ONLY show coupons that match the item types in their CURRENT CART. Do NOT show device-only coupons for a broadband cart, or broadband-only coupons for a device cart. Coupons with 'both' always apply.\n" +
+               "- When listing coupons, format each one on its own line as a numbered list. Each item MUST be on a separate line. Example:\n" +
+               "1. WELCOME20 — £20 off your first phone purchase\n" +
+               "2. DEVICE10 — 10% off device purchases\n" +
+               "- When the user asks to apply a coupon code, use action APPLY_COUPON with payload {\"code\": \"THE_CODE\", \"itemType\": \"device\" or \"broadband\"}. Set itemType based on what the coupon's 'Applies to' field says. If 'both', use the item type the user is targeting.\n" +
+               "- When the user asks to remove a coupon, use action REMOVE_COUPON.\n" +
+               "- If a coupon is already applied (see APPLIED COUPON above), mention it when relevant.\n" +
+               "- NEVER say you cannot apply coupons. You CAN list and apply them.\n\n" +
                "COMPARISON:\n" +
                "- When the user asks to compare 2-3 products, include a comparison field in the response.\n" +
                "- Format: \"comparison\": {\"products\": [\"Product A\", \"Product B\"], \"rows\": [{\"field\": \"Price\", \"values\": [\"£x\", \"£y\"]}, {\"field\": \"Brand\", \"values\": [\"A\", \"B\"]}]}\n" +
@@ -186,23 +202,54 @@ public class GeminiService {
         return prompt.toString();
     }
     
-    private String buildSystemPrompt() {
+    private String buildSystemPrompt(List<ChatRequest.CartItem> cartItems, String appliedCouponCode) {
         String productsJson = gson.toJson(productService.getAllProducts());
-        return "You are an AI Shopping Assistant for \"AI.Shop\". " +
-               "Your goal is to help users find products, navigate the site, and manage their cart.\n\n" +
-               "AVAILABLE PRODUCTS:\n" + productsJson + "\n\n" +
+        StringBuilder prompt = new StringBuilder();
+        prompt.append("You are an AI Shopping Assistant for \"AI.Shop\". ")
+              .append("Your goal is to help users find products, navigate the site, and manage their cart.\n\n")
+              .append("AVAILABLE PRODUCTS:\n").append(productsJson).append("\n\n");
+
+        if (cartItems != null && !cartItems.isEmpty()) {
+            prompt.append("CURRENT CART:\n");
+            for (ChatRequest.CartItem item : cartItems) {
+                prompt.append("- ").append(item.getName())
+                      .append(" (ID: ").append(item.getProductId())
+                      .append(", Price: £").append(String.format("%.2f", item.getPrice()))
+                      .append(", Qty: ").append(item.getQuantity()).append(")\n");
+            }
+            prompt.append("\n");
+        } else {
+            prompt.append("CURRENT CART: empty\n\n");
+        }
+        if (appliedCouponCode != null && !appliedCouponCode.isEmpty()) {
+            prompt.append("APPLIED COUPON: ").append(appliedCouponCode).append("\n\n");
+        }
+
+        prompt.append(buildPromotionsContext());
+
+        prompt.append(
                "CAPABILITIES:\n" +
                "- Search and recommend products based on user queries\n" +
                "- Add products to cart by ID\n" +
                "- Navigate to specific pages (/products, /cart, /checkout, /orders)\n" +
                "- Clear cart contents\n" +
                "- Autofill checkout with user data\n" +
-               "- Show user order history\n\n" +
+               "- Show user order history\n" +
+               "- List available coupons/promotions and apply or remove them\n\n" +
                "RESPONSE FORMAT:\n" +
                "You MUST respond with a JSON object containing:\n" +
-               "{\"action\": \"NAVIGATE\" | \"ADD_TO_CART\" | \"CLEAR_CART\" | \"SHOW_PRODUCTS\" | \"ADVANCE_STEP\" | \"NONE\", " +
-               "\"payload\": \"URL path\" | \"Product ID\" | \"Comma-separated Product IDs\" | null, " +
+               "{\"action\": \"NAVIGATE\" | \"ADD_TO_CART\" | \"CLEAR_CART\" | \"SHOW_PRODUCTS\" | \"APPLY_COUPON\" | \"REMOVE_COUPON\" | \"ADVANCE_STEP\" | \"NONE\", " +
+               "\"payload\": \"URL path\" | \"Product ID\" | \"Comma-separated Product IDs\" | {\"code\": \"PROMO_CODE\", \"itemType\": \"device\" | \"broadband\"} | null, " +
                "\"message\": \"Helpful response to user\"}\n\n" +
+               "COUPON/PROMOTION RULES:\n" +
+               "- Each coupon has an 'Applies to' field: 'device' (phones/laptops/etc), 'broadband', or 'both'.\n" +
+               "- When the user asks about coupons for their cart, ONLY show coupons that match the item types in their cart. Do NOT show device-only coupons for a broadband cart, or broadband-only coupons for a device cart. Coupons with 'both' always apply.\n" +
+               "- When listing coupons, format each one on its own line as a numbered list. Each item MUST be on a separate line. Example:\n" +
+               "1. WELCOME20 — £20 off your first phone purchase\n" +
+               "2. DEVICE10 — 10% off device purchases\n" +
+               "- When the user asks to apply a coupon code, use action APPLY_COUPON with payload {\"code\": \"THE_CODE\", \"itemType\": \"device\" or \"broadband\"}. Set itemType based on what the coupon's 'Applies to' field says. If 'both', use the item type the user is targeting.\n" +
+               "- When the user asks to remove a coupon, use action REMOVE_COUPON.\n" +
+               "- NEVER say you cannot apply coupons. You CAN list and apply them.\n\n" +
                "COMPARISON:\n" +
                "- When the user asks to compare 2-3 products, include a comparison field: \"comparison\": {\"products\": [\"Name A\", \"Name B\"], \"rows\": [{\"field\": \"Price\", \"values\": [\"£x\", \"£y\"]}]}\n" +
                "- Include rows for: Price, Brand, Category, Rating, and all available spec fields.\n\n" +
@@ -219,7 +266,8 @@ public class GeminiService {
                "- Never use NONE action for product display requests\n" +
                "- When the user asks about their cart contents and the cart is empty, clearly tell them their cart is empty and suggest browsing products. Do NOT navigate to /cart or show checkout options for an empty cart.\n" +
                "- If the user asks about broadband, fibre, internet plans, or anything broadband-related, DO NOT say you don't have broadband. Acknowledge what they are looking for and ask for their UK postcode so you can check broadband availability at their address. If a SYSTEM CONTEXT is provided about a broadband guided flow, follow those instructions.\n" +
-               "- ADVANCE_STEP: When a SYSTEM CONTEXT mentions a broadband guided flow step and the user clearly wants to skip, move on, proceed, or is done with the current optional step (add-ons, TV packages, SIM plans, home phone), use action ADVANCE_STEP. This tells the frontend to move to the next step. Include a brief friendly message acknowledging their choice.";
+               "- ADVANCE_STEP: When a SYSTEM CONTEXT mentions a broadband guided flow step and the user clearly wants to skip, move on, proceed, or is done with the current optional step (add-ons, TV packages, SIM plans, home phone), use action ADVANCE_STEP. This tells the frontend to move to the next step. Include a brief friendly message acknowledging their choice.");
+        return prompt.toString();
     }
     
     private String buildRequestBody(String systemPrompt, ChatRequest request) {
@@ -254,6 +302,37 @@ public class GeminiService {
                    .replace("\n", "\\n")
                    .replace("\r", "\\r")
                    .replace("\t", "\\t");
+    }
+
+    private String buildPromotionsContext() {
+        try {
+            List<Promotion> promotions = promotionService.getAllPromotions();
+            if (promotions == null || promotions.isEmpty()) {
+                return "";
+            }
+            StringBuilder sb = new StringBuilder();
+            sb.append("AVAILABLE COUPONS/PROMOTIONS:\n");
+            for (Promotion p : promotions) {
+                if (!p.isActive()) continue;
+                sb.append("- Code: ").append(p.getPromoCode() != null ? p.getPromoCode() : "N/A");
+                sb.append(", Name: ").append(p.getName());
+                sb.append(", Discount: ").append(p.getDiscountValue());
+                sb.append(p.getDiscountType() != null && p.getDiscountType().equals("percentage") ? "%" : " off");
+                if (p.getDescription() != null && !p.getDescription().isEmpty()) {
+                    sb.append(", Description: ").append(p.getDescription());
+                }
+                String itemType = p.getApplicableItemType();
+                if (itemType == null || itemType.isBlank()) {
+                    itemType = "both";
+                }
+                sb.append(", Applies to: ").append(itemType);
+                sb.append("\n");
+            }
+            sb.append("\n");
+            return sb.toString();
+        } catch (Exception e) {
+            return "";
+        }
     }
     
     private ChatResponse parseGeminiResponse(String responseBody) {

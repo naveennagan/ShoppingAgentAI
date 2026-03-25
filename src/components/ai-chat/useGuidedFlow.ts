@@ -27,7 +27,7 @@ export function useGuidedFlow() {
     useEffect(() => { guidedFlowRef.current = guidedFlow; }, [guidedFlow]);
 
     const router = useRouter();
-    const { addToCart, clearCart, updateQuantity, removeFromCart, items: cart, applyCoupon, removeCoupon, appliedCoupon, addBroadbandServiceToCart } = useCart();
+    const { addToCart, clearCart, updateQuantity, removeFromCart, items: cart, applyCoupon, removeCoupon, appliedCoupon, addBroadbandServiceToCart, applyDeviceVoucher, applyBroadbandVoucher } = useCart();
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     // Listen for broadband plans loaded on the broadband page
@@ -43,6 +43,8 @@ export function useGuidedFlow() {
 
     const isGuidedFlowTrigger = (text: string): boolean => {
         const lower = text.toLowerCase();
+        // Don't trigger guided flow for coupon/voucher/deal queries that mention broadband
+        if (/vouchers?|coupons?|promos?|promotions?|discounts?|deals?/.test(lower)) return false;
         if (GUIDED_FLOW_TRIGGERS.some(trigger => lower.includes(trigger))) return true;
         if (/\bbroadband\b/.test(lower) && !lower.includes('cancel')) return true;
         return false;
@@ -1191,7 +1193,14 @@ export function useGuidedFlow() {
                     setTimeout(() => router.push('/checkout'), 100);
                 } else if (act.action === 'apply_coupon' && act.payload?.code) {
                     try {
-                        await applyCoupon(act.payload.code);
+                        const itemType = act.payload.itemType;
+                        if (itemType === 'broadband') {
+                            await applyBroadbandVoucher(act.payload.code);
+                        } else if (itemType === 'device') {
+                            await applyDeviceVoucher(act.payload.code);
+                        } else {
+                            await applyCoupon(act.payload.code);
+                        }
                     } catch (err) {
                         const msg = err instanceof Error ? err.message : 'Failed to apply coupon';
                         setMessages(prev => [...prev, { role: 'ai', text: `Couldn't apply that code: ${msg}` }]);

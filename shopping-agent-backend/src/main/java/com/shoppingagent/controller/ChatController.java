@@ -99,7 +99,8 @@ public class ChatController {
         }
 
         // Coupon operations
-        if (userPart.matches(".*(apply|use|remove|delete) (coupon|code|promo|voucher|discount).*")) {
+        if (userPart.matches(".*(apply|use|remove|delete|show|list|what|any|available|valid) .*(coupon|code|promo|voucher|discount|deal).*") ||
+            userPart.matches(".*(coupon|promo|voucher|discount|deal)s?\\b.*")) {
             return false;
         }
 
@@ -127,9 +128,9 @@ public class ChatController {
 
         List<String> sourceIds = ragContext.getSourceIds();
 
-        // Resolve short IDs in payload
-        if (response.getPayload() != null) {
-            response.setPayload(replaceShortIds(response.getPayload(), sourceIds));
+        // Resolve short IDs in payload (only for string payloads)
+        if (response.getPayload() instanceof String) {
+            response.setPayload(replaceShortIds((String) response.getPayload(), sourceIds));
         }
 
         // Resolve short IDs in summary card IDs

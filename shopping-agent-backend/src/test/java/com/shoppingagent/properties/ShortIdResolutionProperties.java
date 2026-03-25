@@ -74,12 +74,12 @@ class ShortIdResolutionProperties {
         invokeResolveShortIds(response, ragContext);
 
         // After resolution, no short IDs should remain
-        assertThat(SHORT_ID_PATTERN.matcher(response.getPayload()).find())
+        assertThat(SHORT_ID_PATTERN.matcher((String) response.getPayload()).find())
                 .as("Payload should contain no unresolved short IDs")
                 .isFalse();
 
         // Each resolved ID should be a valid UUID from the sourceIds list
-        String[] resolvedIds = response.getPayload().split(",");
+        String[] resolvedIds = ((String) response.getPayload()).split(",");
         for (String resolvedId : resolvedIds) {
             assertThat(UUID_PATTERN.matcher(resolvedId).matches())
                     .as("Resolved ID '%s' should be a valid UUID", resolvedId)

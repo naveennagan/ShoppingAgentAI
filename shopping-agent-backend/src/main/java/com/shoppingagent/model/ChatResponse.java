@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class ChatResponse {
     private String action;
-    private String payload;
+    private Object payload;
     private String message;
     private List<SummaryCard> summaryCards;
     private List<String> suggestedActions;
@@ -37,5 +37,14 @@ public class ChatResponse {
         this.action = action;
         this.payload = payload;
         this.message = message;
+    }
+
+    /**
+     * Returns payload as a String. If payload is a non-string object, returns its JSON representation.
+     */
+    public String getPayloadAsString() {
+        if (payload == null) return null;
+        if (payload instanceof String) return (String) payload;
+        return payload.toString();
     }
 }

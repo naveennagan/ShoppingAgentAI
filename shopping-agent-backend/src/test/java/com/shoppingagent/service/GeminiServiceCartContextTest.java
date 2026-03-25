@@ -31,6 +31,9 @@ class GeminiServiceCartContextTest {
     @Mock
     private ProductService productService;
 
+    @Mock
+    private PromotionService promotionService;
+
     private HttpServer server;
     private final AtomicReference<String> capturedBody = new AtomicReference<>();
 
@@ -156,7 +159,7 @@ class GeminiServiceCartContextTest {
         int port = server.getAddress().getPort();
         String localUrl = "http://localhost:" + port;
 
-        GeminiService service = new GeminiService(productService) {
+        GeminiService service = new GeminiService(productService, promotionService) {
             @Override
             public ChatResponse chatWithContext(ChatRequest request, RagContext ragContext) {
                 try {

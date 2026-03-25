@@ -205,8 +205,16 @@ export const apiClient = {
       body: JSON.stringify(body)
     });
     if (!res.ok) {
-      const data = await res.json();
-      throw new Error(data.error || 'Failed to validate coupon code');
+      let errorMsg = 'Failed to validate coupon code';
+      try {
+        const data = await res.json();
+        errorMsg = data.error || errorMsg;
+      } catch {
+        // Response wasn't JSON (e.g. "Service temporarily unavailable")
+        const text = await res.text().catch(() => '');
+        if (text) errorMsg = text;
+      }
+      throw new Error(errorMsg);
     }
     return res.json();
   },
