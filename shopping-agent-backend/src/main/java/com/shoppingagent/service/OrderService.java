@@ -46,6 +46,7 @@ public class OrderService {
 
         List<Order.OrderItem> orderItems = new ArrayList<>();
         double totalAmount = 0.0;
+        double totalSavings = 0.0;
 
         for (Cart.CartItem cartItem : cart.getItems()) {
             Optional<Product> product = productService.getProductById(cartItem.getProductId());
@@ -65,6 +66,7 @@ public class OrderService {
                         effectivePrice = DiscountCalculator.calculateDiscountedPrice(
                                 originalPrice, promo.getDiscountType(), promo.getDiscountValue());
                         promotionalLabel = promo.getPromotionalLabel();
+                        totalSavings += (originalPrice - effectivePrice) * cartItem.getQuantity();
                     }
                 } catch (Exception e) {
                     logger.warn("Failed to fetch promotions for product {}, using original price", p.getId(), e);
@@ -84,6 +86,9 @@ public class OrderService {
         orderRow.put("status", "CONFIRMED");
         orderRow.put("shipping_address", shippingAddress);
         orderRow.put("payment_method", paymentMethod);
+        if (totalSavings > 0) {
+            orderRow.put("total_savings", totalSavings);
+        }
 
         String orderJson = supabaseClient.post("orders", gson.toJson(orderRow));
         List<OrderRow> created = gson.fromJson(orderJson, ORDER_ROW_LIST);
@@ -107,7 +112,7 @@ public class OrderService {
         }
 
         cartService.clearCart(sessionId);
-        logger.info("Order {} created for session {}", orderId, sessionId);
+        logger.info("Order {} created for session {} with total savings: £{}", orderId, sessionId, totalSavings);
 
         return new Order(orderId, sessionId, orderItems, totalAmount,
                 "CONFIRMED", java.time.LocalDateTime.now(), shippingAddress, paymentMethod,

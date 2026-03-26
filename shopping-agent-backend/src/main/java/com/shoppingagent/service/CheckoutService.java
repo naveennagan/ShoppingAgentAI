@@ -233,7 +233,26 @@ public class CheckoutService {
                         + "&session_id=eq." + sessionId + "&item_type=neq.broadband_service");
         List<CartItemRow> deviceCartItems = gson.fromJson(deviceCartJson,
                 new TypeToken<List<CartItemRow>>() {}.getType());
+        
+        double actualTotalAmount = 0.0; // Track the actual total after all discounts
+        
         if (deviceCartItems != null) {
+            // Calculate total original price for voucher discount distribution
+            double totalOriginalPrice = 0.0;
+            for (CartItemRow item : deviceCartItems) {
+                double itemOriginalPrice = item.unit_price != null ? item.unit_price : 0.0;
+                if (item.product_id != null && (item.display_name == null || item.display_name.isBlank())) {
+                    String pJson = supabaseClient.get("products",
+                            "select=price&id=eq." + item.product_id);
+                    List<ProductRow> products = gson.fromJson(pJson,
+                            new TypeToken<List<ProductRow>>() {}.getType());
+                    if (products != null && !products.isEmpty()) {
+                        itemOriginalPrice = products.get(0).price;
+                    }
+                }
+                totalOriginalPrice += itemOriginalPrice * item.quantity;
+            }
+            
             for (CartItemRow item : deviceCartItems) {
                 String productName = item.display_name;
                 double originalPrice = item.unit_price != null ? item.unit_price : 0.0;
@@ -255,7 +274,7 @@ public class CheckoutService {
                     }
                 }
 
-                // Apply active auto-promotions
+                // Apply active auto-promotions first
                 if (item.product_id != null) {
                     try {
                         List<com.shoppingagent.model.Promotion> promotions = promotionService.getPromotionsForProduct(item.product_id);
@@ -272,6 +291,21 @@ public class CheckoutService {
                         logger.warn("Failed to fetch promotions for product {}, using original price", item.product_id, e);
                     }
                 }
+                
+                // Apply voucher discount proportionally if provided
+                if (payment.getVoucherDiscount() != null && payment.getVoucherDiscount() > 0 && totalOriginalPrice > 0) {
+                    double itemProportion = (originalPrice * item.quantity) / totalOriginalPrice;
+                    double itemVoucherDiscount = payment.getVoucherDiscount() * itemProportion;
+                    effectivePrice = Math.max(0, effectivePrice - (itemVoucherDiscount / item.quantity));
+                    
+                    // Use voucher name as promotional label if no auto-promotion exists
+                    if (promotionalLabel == null && payment.getVoucherName() != null) {
+                        promotionalLabel = payment.getVoucherName();
+                    }
+                }
+                
+                // Add to actual total
+                actualTotalAmount += effectivePrice * item.quantity;
 
                 JsonObject itemBody = new JsonObject();
                 itemBody.addProperty("order_id", orderId);
@@ -285,6 +319,11 @@ public class CheckoutService {
                 supabaseClient.post("order_items", gson.toJson(itemBody));
             }
         }
+        
+        // Update the order with the correct total amount after all discounts
+        JsonObject orderUpdate = new JsonObject();
+        orderUpdate.addProperty("total_amount", actualTotalAmount);
+        supabaseClient.patch("orders", "id=eq." + orderId, gson.toJson(orderUpdate));
 
         // Update checkout_sessions: mark device_payment_done, link device_order_id, update status
         JsonObject sessionUpdate = new JsonObject();
@@ -302,7 +341,7 @@ public class CheckoutService {
         Order order = new Order();
         order.setOrderId(orderId);
         order.setSessionId(sessionId);
-        order.setTotalAmount(oneTimeTotal);
+        order.setTotalAmount(actualTotalAmount); // Use the actual discounted total
         order.setStatus("CONFIRMED");
         order.setOrderDate(java.time.LocalDateTime.now());
         order.setItems(new ArrayList<>());

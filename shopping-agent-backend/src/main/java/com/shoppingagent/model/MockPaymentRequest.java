@@ -15,4 +15,6 @@ public class MockPaymentRequest {
     private String sessionId;
     private String cardholderName;
     private String last4Digits;
+    private Double voucherDiscount; // Optional: voucher discount amount
+    private String voucherName;     // Optional: voucher name/label
 }

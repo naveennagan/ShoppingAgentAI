@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import PriceDisplay from '@/components/ui/PriceDisplay';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
@@ -163,12 +162,37 @@ export default function OrdersPage() {
                                             <div style={{ flex: 1 }}>
                                                 <p style={{ fontWeight: 600, margin: 0 }}>{item.productName}</p>
                                                 <p style={{ color: '#6b7280', fontSize: '0.85rem', margin: '0.1rem 0 0' }}>Qty: {item.quantity}</p>
+                                                {item.promotionalLabel && (
+                                                    <span style={{
+                                                        background: '#ef4444',
+                                                        color: '#fff',
+                                                        padding: '0.15rem 0.4rem',
+                                                        borderRadius: '4px',
+                                                        fontSize: '0.7rem',
+                                                        fontWeight: 600,
+                                                        marginTop: '0.25rem',
+                                                        display: 'inline-block'
+                                                    }}>
+                                                        {item.promotionalLabel}
+                                                    </span>
+                                                )}
                                             </div>
-                                            <PriceDisplay
-                                                originalPrice={effectiveOriginalPrice * item.quantity}
-                                                discountedPrice={isDiscounted ? item.price * item.quantity : null}
-                                                promotionalLabel={item.promotionalLabel}
-                                            />
+                                            <div style={{ textAlign: 'right' }}>
+                                                {isDiscounted ? (
+                                                    <div>
+                                                        <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#ef4444' }}>
+                                                            £{(item.price * item.quantity).toFixed(2)}
+                                                        </span>
+                                                        <div style={{ fontSize: '0.85rem', color: '#9ca3af', textDecoration: 'line-through' }}>
+                                                            £{(effectiveOriginalPrice * item.quantity).toFixed(2)}
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--primary)' }}>
+                                                        £{(item.price * item.quantity).toFixed(2)}
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
                                     );
                                 })}
@@ -180,11 +204,34 @@ export default function OrdersPage() {
                                     <p style={{ margin: 0 }}>{order.shippingAddress}</p>
                                     <p style={{ margin: '0.2rem 0 0' }}>{order.paymentMethod}</p>
                                 </div>
-                                <span style={{ fontWeight: 800, fontSize: '1.1rem' }}>
-                                    {order.orderType === 'service'
-                                        ? `£${(order.monthlyTotal ?? 0).toFixed(2)}/mo`
-                                        : `Total: £${order.totalAmount.toFixed(2)}`}
-                                </span>
+                                <div style={{ textAlign: 'right' }}>
+                                    <span style={{ fontWeight: 800, fontSize: '1.1rem' }}>
+                                        {order.orderType === 'service'
+                                            ? `£${(order.monthlyTotal ?? 0).toFixed(2)}/mo`
+                                            : `Total: £${order.totalAmount.toFixed(2)}`}
+                                    </span>
+                                    {/* Show savings if any items were discounted */}
+                                    {(() => {
+                                        const totalSavings = order.items.reduce((sum, item) => {
+                                            // Use the stored original_price if available, otherwise fall back to current price
+                                            const originalPrice = (item.originalPrice && item.originalPrice > 0) ? item.originalPrice : item.price;
+                                            const actualPrice = item.price;
+                                            // Only count as savings if original price is higher than actual price
+                                            if (originalPrice > actualPrice) {
+                                                return sum + ((originalPrice - actualPrice) * item.quantity);
+                                            }
+                                            return sum;
+                                        }, 0);
+                                        if (totalSavings > 0) {
+                                            return (
+                                                <div style={{ fontSize: '0.85rem', color: '#15803d', fontWeight: 600, marginTop: '0.25rem' }}>
+                                                    You saved £{totalSavings.toFixed(2)}
+                                                </div>
+                                            );
+                                        }
+                                        return null;
+                                    })()} 
+                                </div>
                             </div>
                         </div>
                     ))}

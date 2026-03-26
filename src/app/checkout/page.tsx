@@ -39,6 +39,11 @@ export default function CheckoutPage() {
   // Snapshot broadband discount before cart items are removed on booking
   const [savedBroadbandDiscount, setSavedBroadbandDiscount] = useState<number | undefined>(undefined);
   const [savedDiscountedMonthlyTotal, setSavedDiscountedMonthlyTotal] = useState<number | undefined>(undefined);
+  
+  // Snapshot device discount before cart items are removed on payment
+  const [savedDeviceDiscount, setSavedDeviceDiscount] = useState<number | undefined>(undefined);
+  const [savedDiscountedTodayTotal, setSavedDiscountedTodayTotal] = useState<number | undefined>(undefined);
+  const [savedDeviceVoucherName, setSavedDeviceVoucherName] = useState<string | undefined>(undefined);
 
   // Cancel modal
   const [cancelTarget, setCancelTarget] = useState<'devices' | 'broadband' | null>(null);
@@ -115,7 +120,27 @@ export default function CheckoutPage() {
 
   const handlePay = async (cardholderName: string, last4Digits: string) => {
     const sessionId = localStorage.getItem('sessionId')!;
-    await apiClient.processDevicePayment(sessionId, { cardholderName, last4Digits });
+    
+    // Prepare payment details with voucher information if available
+    const paymentDetails: { cardholderName: string; last4Digits: string; voucherDiscount?: number; voucherName?: string } = {
+      cardholderName,
+      last4Digits
+    };
+    
+    // Add voucher discount information if a device voucher is applied
+    if (appliedDeviceVoucher && deviceDiscount > 0) {
+      paymentDetails.voucherDiscount = deviceDiscount;
+      paymentDetails.voucherName = appliedDeviceVoucher.promotionName;
+    }
+    
+    // Snapshot device discount values before cart removal wipes them
+    if (appliedDeviceVoucher && deviceDiscount > 0) {
+      setSavedDeviceDiscount(deviceDiscount);
+      setSavedDiscountedTodayTotal(payTodayTotal);
+      setSavedDeviceVoucherName(appliedDeviceVoucher.promotionName);
+    }
+    
+    await apiClient.processDevicePayment(sessionId, paymentDetails);
     setDevicePaid(true);
     for (const item of items.filter(i => i.item_type !== 'broadband_service')) {
       await removeFromCart(item.product.id);
@@ -323,9 +348,9 @@ export default function CheckoutPage() {
                 devicePaid={devicePaid}
                 onPay={handlePay}
                 onCancel={() => setCancelTarget('devices')}
-                discountedTotal={appliedDeviceVoucher && deviceDiscount > 0 ? payTodayTotal : undefined}
-                deviceDiscount={deviceDiscount}
-                voucherName={appliedDeviceVoucher?.promotionName}
+                discountedTotal={savedDiscountedTodayTotal ?? (appliedDeviceVoucher && deviceDiscount > 0 ? payTodayTotal : undefined)}
+                deviceDiscount={savedDeviceDiscount ?? deviceDiscount}
+                voucherName={savedDeviceVoucherName ?? appliedDeviceVoucher?.promotionName}
               />
             )}
             {session.hasBroadbandService && (

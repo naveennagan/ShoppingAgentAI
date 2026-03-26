@@ -235,7 +235,7 @@ export const apiClient = {
 
   async processDevicePayment(
     sessionId: string,
-    paymentDetails: { cardholderName: string; last4Digits: string }
+    paymentDetails: { cardholderName: string; last4Digits: string; voucherDiscount?: number; voucherName?: string }
   ) {
     const res = await fetch(`${API_URL}/api/checkout/device-payment`, {
       method: 'POST',

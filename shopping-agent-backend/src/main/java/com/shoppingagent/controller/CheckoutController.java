@@ -46,7 +46,7 @@ public class CheckoutController {
 
     /**
      * POST /api/checkout/device-payment
-     * Body: MockPaymentRequest (sessionId, cardholderName, last4Digits)
+     * Body: MockPaymentRequest (sessionId, cardholderName, last4Digits, voucherDiscount, voucherName)
      * Mock payment — always succeeds for POC.
      */
     @PostMapping("/device-payment")
