@@ -1,4 +1,5 @@
 import { Product, Promotion, Bundle } from '@/lib/products';
+import type { BroadbandPlan } from '@/types/broadband';
 
 /**
  * Builds a compact system prompt.
@@ -12,7 +13,8 @@ export function createShoppingAssistantPrompt(
   bundles: Bundle[] = [],
   couponProductMappings: Record<string, string[]> = {},
   cartItems: { productId: string; name: string; price: number; quantity: number }[] = [],
-  appliedCouponCode: string | null = null
+  appliedCouponCode: string | null = null,
+  broadbandPlans: BroadbandPlan[] = []
 ): { prompt: string; idMap: Record<string, string> } {
 
   // Short index → real UUID (e.g. "p0" → "uuid-...")
@@ -87,6 +89,16 @@ export function createShoppingAssistantPrompt(
     return `${sid}:${item.name}×${item.quantity}@£${item.price}${couponStr}`;
   }).join('; ');
 
+  // Broadband plans (only present when user is on the broadband page)
+  const broadbandSection = broadbandPlans.length > 0
+    ? `\nBROADBAND_PLANS (planId:name|down|up|tech|contract|price):\n` +
+      broadbandPlans.map(p =>
+        `${p.planId}:${p.name}|down:${p.downloadSpeedMbps}Mbps|up:${p.uploadSpeedMbps}Mbps` +
+        `|tech:${p.technologyType}|contract:${p.contractLengthMonths}mo|£${p.monthlyPrice}/mo` +
+        (p.promotionalLabel ? `|promo:${p.promotionalLabel}` : '')
+      ).join('\n')
+    : '';
+
   const prompt = `Shopping assistant for AI.Shop. Respond ONLY in JSON.
 
 PRODUCTS (id:name|price|brand[|coupons]):
@@ -94,25 +106,32 @@ ${productLines}
 ${directPromoLines ? `\nDIRECT_PROMOS: ${directPromoLines}` : ''}
 ${bundleLines ? `BUNDLES: ${bundleLines}` : ''}
 CART: ${cartLines}
-ACTIVE_COUPON: ${appliedCouponCode ?? 'none'}
+ACTIVE_COUPON: ${appliedCouponCode ?? 'none'}${broadbandSection}
 
 RULES:
+- FORMATTING: When responding with any list of 2 or more items (products, plans, features, addresses, appointment slots, add-ons, etc.), ALWAYS format them as a bulleted list using "• " (bullet point) prefix for each item, one item per line. Before the list, include the total count (e.g., "I found 8 addresses:", "Here are 3 plans:"). Never use numbered lists or inline comma-separated lists for 2+ items.
 - Use short IDs (p0,p1…) in payload/suggestions, never UUIDs or names
 - Only mention a coupon if that product's line includes it
 - suggestions=[]: ONLY show product cards when user asks about SPECIFIC products by name/brand/model, comparisons, deals/discounts, price range/budget, or right after add_to_cart. For vague/generic asks like "suggest one", "what should I buy", "recommend something", respond with text only (name the product in your message) and set suggestions to empty array []. Never show a product list for open-ended questions.
 - When user asks about deals, discounts, or discounted products: include product IDs with a "deal:" tag in suggestions so they see the cards with prices. Products with "deal:" in their line have an active automatic discount already applied.
 - When user specifies a price range or budget (e.g. "under £500", "between £300 and £800", "cheapest phone"), filter products by price and show matching ones as suggestions with their product cards.
 - After add_to_cart: 1-sentence reason + 2-3 suggestions + ask to apply coupon if available
-- When user asks about their orders or order history, use navigate("/orders") to take them to the orders page.
+- When user asks to VIEW/SHOW/SEE their orders (e.g. "view my orders", "show my orders", "what are my orders"), use fetch_orders action to display order details in the chat. When user asks to GO TO the orders page (e.g. "go to my orders", "take me to orders", "open orders page"), use navigate("/orders").
+- EMPTY CART: When the user asks what's in their cart (e.g. "what's in my cart", "show my cart", "cart contents") and CART is "empty", clearly tell them their cart is empty and suggest browsing products or deals. Do NOT navigate to /cart or show checkout options for an empty cart.
 - Coupon flow: if user explicitly says "apply <CODE>", use apply_coupon immediately. Only ask for confirmation when suggesting a coupon proactively.
 - ONLY ONE coupon can be active at a time. If a coupon is already applied and user wants a different one, you MUST remove_coupon first then apply_coupon. Never tell the user multiple coupons are applied — that is impossible.
 - ACTIVE_COUPON shows the currently applied coupon. If it says "none", no coupon is applied — do NOT claim one is already applied. Automatic deals (deal: tag on products) are NOT coupons — they apply automatically and don't count as an applied coupon.
 
 OUTPUT: {"actions":[{"action":"...","payload":any}],"suggestions":["p0","p1"],"message":"string","comparison":{"products":["Name A","Name B"],"rows":[{"field":"Price","values":["£x","£y"]},{"field":"Brand","values":["A","B"]}]}}
 actions is an ARRAY — use multiple entries when needed (e.g. remove_coupon then apply_coupon). Use [{"action":"none"}] when no action needed.
-Action types: add_to_cart(id|[ids]), update_quantity({productId,quantity}), set_all_quantities({quantity}), remove_from_cart(id), clear_cart, navigate("/products"|"/cart"|"/checkout"), autofill_checkout, apply_coupon({code}), remove_coupon
+Action types: add_to_cart(id|[ids]), update_quantity({productId,quantity}), set_all_quantities({quantity}), remove_from_cart(id), clear_cart, navigate("/products"|"/cart"|"/checkout"|"/orders"), fetch_orders, autofill_checkout({cardholderName?,last4Digits?,fullName?,email?,phone?,address?}), edit_checkout({cardholderName?,last4Digits?,fullName?,email?,phone?,address?}), apply_coupon({code}), remove_coupon, add_broadband_to_cart(planId), advance_step
+- autofill_checkout: Fills the checkout form and navigates to payment. Parse user input intelligently: "fill card details as Jane and 6345" means cardholderName="Jane", last4Digits="6345". The first text value is always the cardholder name, and any 4-digit number is the last 4 digits of the card. Always include both cardholderName and last4Digits in the payload when the user provides them. Other fields (fullName, email, phone, address) are optional and will use defaults if omitted.
+- edit_checkout: Updates specific checkout fields WITHOUT navigating. Use when user is already on checkout and wants to change a field. Examples: "change name to Sarah" → {fullName:"Sarah"}, "update card to 5678" → {last4Digits:"5678"}, "change email to x@y.com" → {email:"x@y.com"}, "change cardholder to Bob" → {cardholderName:"Bob"}. Only include the fields being changed. About You fields: fullName, email, phone, address. Payment fields: cardholderName, last4Digits.
 - When switching coupons, ALWAYS emit both: [{"action":"remove_coupon"},{"action":"apply_coupon","payload":{"code":"..."}}]
 - When user asks to compare 2-3 products, populate the comparison field with a table. Include rows for: Price, Brand, Category, Rating, and all available spec fields (e.g. Storage, RAM, Display, Battery, Camera, OS, etc). Keep message brief.
+- advance_step: When a SYSTEM CONTEXT mentions a broadband guided flow step and the user clearly wants to skip, move on, proceed, or is done with the current optional step (add-ons, TV packages, SIM plans, home phone), use action advance_step. This tells the frontend to move to the next step. Include a brief friendly message.
+- BROADBAND: If BROADBAND_PLANS are listed, you can recommend plans and add them to cart. Use add_broadband_to_cart with the planId. When recommending, explain why the plan suits the user's needs (speed, usage, price). You may suggest up to 2 alternatives.
+- BROADBAND (no plans loaded): If the user asks about broadband, fibre, internet plans, or anything broadband-related and BROADBAND_PLANS is NOT listed above, you can still help! If the message includes a SYSTEM CONTEXT about a broadband guided flow, follow those instructions. Otherwise, acknowledge what the user is looking for and ask for their UK postcode so you can check broadband availability at their address.
 Test cards: 4242424242424242/TestUser/12/25/123`;
 
   return { prompt, idMap };

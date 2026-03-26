@@ -1,290 +1,534 @@
 'use client';
 
-import { useCart } from '@/context/CartContext';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import styles from './checkout.module.scss';
+import { apiClient } from '@/lib/api-client';
+import { useCart } from '@/context/CartContext';
+import { CheckoutSession, Appointment } from '@/types/checkout';
+import CancelModal from '@/components/checkout/CancelModal';
+import DevicePaymentSection from '@/components/checkout/DevicePaymentSection';
+import BroadbandSection from '@/components/checkout/BroadbandSection';
+import { CheckCircle } from 'lucide-react';
+import Link from 'next/link';
+
+interface AboutYou {
+  fullName: string;
+  email: string;
+  phone: string;
+  address: string;
+}
 
 export default function CheckoutPage() {
-    const { total, clearCart } = useCart();
-    const router = useRouter();
-    const [step, setStep] = useState(1);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
+  const { removeFromCart, items, payMonthlyTotal, payTodayTotal, broadbandDiscount, deviceDiscount, appliedBroadbandVoucher, appliedDeviceVoucher } = useCart();
+  const router = useRouter();
 
-    const [formData, setFormData] = useState({
-        name: '',
-        email: '',
-        address: '',
-        city: '',
-        zip: ''
-    });
+  const [session, setSession] = useState<CheckoutSession | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-    const [paymentData, setPaymentData] = useState({
-        cardNumber: '',
-        cardName: '',
-        expiry: '',
-        cvv: ''
-    });
+  // Step: 'about' | 'payment'
+  const [step, setStep] = useState<'about' | 'payment'>('about');
+  const [aboutYou, setAboutYou] = useState<AboutYou>({ fullName: '', email: '', phone: '', address: '' });
+  const [aboutError, setAboutError] = useState('');
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+  // Payment state
+  const [devicePaid, setDevicePaid] = useState(false);
+  const [appointments, setAppointments] = useState<Record<string, Appointment>>({});
+  const [aboutSaving, setAboutSaving] = useState(false);
+
+  // Snapshot broadband discount before cart items are removed on booking
+  const [savedBroadbandDiscount, setSavedBroadbandDiscount] = useState<number | undefined>(undefined);
+  const [savedDiscountedMonthlyTotal, setSavedDiscountedMonthlyTotal] = useState<number | undefined>(undefined);
+  
+  // Snapshot device discount before cart items are removed on payment
+  const [savedDeviceDiscount, setSavedDeviceDiscount] = useState<number | undefined>(undefined);
+  const [savedDiscountedTodayTotal, setSavedDiscountedTodayTotal] = useState<number | undefined>(undefined);
+  const [savedDeviceVoucherName, setSavedDeviceVoucherName] = useState<string | undefined>(undefined);
+
+  // Cancel modal
+  const [cancelTarget, setCancelTarget] = useState<'devices' | 'broadband' | null>(null);
+
+  // Autofill card details from AI assistant
+  const [autofillCard, setAutofillCard] = useState<{ cardholderName?: string; last4Digits?: string } | null>(null);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const d = (e as CustomEvent).detail || {};
+      // Normalize field names — the LLM may use various naming conventions
+      const cardholderName = d.cardholderName || d.cardName || d.cardholder_name || d.name;
+      const last4Digits = d.last4Digits || d.cardNumber || d.last4 || d.card_number || d.lastFour;
+      const fullName = d.fullName || d.full_name;
+      const email = d.email;
+      const phone = d.phone;
+      const address = d.address;
+
+      // Auto-fill About You — only overwrite fields that are currently empty
+      setAboutYou(prev => ({
+        fullName: prev.fullName || fullName || 'John Doe',
+        email: prev.email || email || 'john@example.com',
+        phone: prev.phone || phone || '+44 7700 900000',
+        address: prev.address || address || '123 AI Boulevard, London, SW1A 1AA',
+      }));
+      // Store card details for DevicePaymentSection
+      if (cardholderName || last4Digits) {
+        setAutofillCard(prev => ({
+          cardholderName: cardholderName || prev?.cardholderName,
+          last4Digits: last4Digits || prev?.last4Digits,
+        }));
+      }
+      // Auto-save customer details and advance to payment
+      const sessionId = localStorage.getItem('sessionId');
+      setAboutYou(current => {
+        const toSave = { ...current };
+        if (sessionId) {
+          apiClient.saveCustomerDetails(sessionId, toSave).then(() => {
+            setStep('payment');
+          }).catch(() => {
+            setStep('payment');
+          });
+        } else {
+          setStep('payment');
+        }
+        return current;
+      });
     };
+    window.addEventListener('autofill-checkout', handler);
+    return () => window.removeEventListener('autofill-checkout', handler);
+  }, []);
 
-    const handlePaymentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setPaymentData(prev => ({ ...prev, [e.target.name]: e.target.value }));
-        setError('');
+  // Listen for AI-driven field edits on the checkout form
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const d = (e as CustomEvent).detail || {};
+      // Normalize field names
+      const cardholderName = d.cardholderName || d.cardName || d.cardholder_name || d.name;
+      const last4Digits = d.last4Digits || d.cardNumber || d.last4 || d.card_number || d.lastFour;
+      const fullName = d.fullName || d.full_name;
+      const email = d.email;
+      const phone = d.phone;
+      const address = d.address;
+
+      // Update About You fields if provided
+      if (fullName || email || phone || address) {
+        setAboutYou(prev => ({
+          fullName: fullName ?? prev.fullName,
+          email: email ?? prev.email,
+          phone: phone ?? prev.phone,
+          address: address ?? prev.address,
+        }));
+        const sessionId = localStorage.getItem('sessionId');
+        if (sessionId) {
+          setAboutYou(current => {
+            apiClient.saveCustomerDetails(sessionId, { ...current }).catch(() => {});
+            return current;
+          });
+        }
+      }
+      // Update card details if provided
+      if (cardholderName || last4Digits) {
+        setAutofillCard(prev => ({
+          cardholderName: cardholderName ?? prev?.cardholderName,
+          last4Digits: last4Digits ?? prev?.last4Digits,
+        }));
+      }
     };
+    window.addEventListener('edit-checkout', handler);
+    return () => window.removeEventListener('edit-checkout', handler);
+  }, []);
 
-    // Listen for AI Autofill event
-    useEffect(() => {
-        const handleAutofill = (e: Event) => {
-            const detail = (e as CustomEvent).detail;
-
-            // If empty detail (generic request), use defaults
-            const defaults = {
-                name: 'John Doe',
-                email: 'john.doe@example.com',
-                address: '123 AI Boulevard',
-                city: 'Tech City',
-                zip: '94043'
-            };
-
-            const paymentDefaults = {
-                cardNumber: '4242424242424242',
-                cardName: 'Test User',
-                expiry: '12/25',
-                cvv: '123'
-            };
-
-            const updates = Object.keys(detail).length > 0 ? detail : defaults;
-
-            setFormData(prev => ({
-                ...prev,
-                name: updates.name || defaults.name,
-                email: updates.email || defaults.email,
-                address: updates.address || defaults.address,
-                city: updates.city || defaults.city,
-                zip: updates.zip || defaults.zip,
-            }));
-
-            // Autofill payment if payment fields are provided or generic request
-            const paymentUpdates = {
-                cardNumber: updates.cardNumber || paymentDefaults.cardNumber,
-                cardName: updates.cardName || paymentDefaults.cardName,
-                expiry: updates.expiry || paymentDefaults.expiry,
-                cvv: updates.cvv || paymentDefaults.cvv,
-            };
-            setPaymentData(paymentUpdates);
-            
-            // Auto-advance to payment step after autofill
-            setTimeout(() => setStep(2), 500);
-        };
-
-        window.addEventListener('autofill-checkout', handleAutofill);
-        return () => window.removeEventListener('autofill-checkout', handleAutofill);
-    }, []);
-
-    const handleNext = (e: React.FormEvent) => {
-        e.preventDefault();
-        setStep(2);
+  // Listen for appointments booked via AI chat and update checkout state
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { broadbandItemId, appointment } = (e as CustomEvent).detail || {};
+      if (!broadbandItemId || !appointment) return;
+      // Update appointments map
+      setAppointments(prev => ({ ...prev, [broadbandItemId]: appointment }));
+      // Update session booking status
+      setSession(prev => {
+        if (!prev) return prev;
+        const updatedStatus = { ...prev.broadbandBookingStatus, [broadbandItemId]: appointment.appointmentId };
+        const allBooked = Object.values(updatedStatus).every(v => v !== 'unbooked');
+        if (allBooked && broadbandDiscount > 0) {
+          setSavedBroadbandDiscount(broadbandDiscount);
+          setSavedDiscountedMonthlyTotal(payMonthlyTotal);
+        }
+        return { ...prev, broadbandBookingStatus: updatedStatus };
+      });
     };
+    window.addEventListener('appointment-booked', handler);
+    return () => window.removeEventListener('appointment-booked', handler);
+  }, [broadbandDiscount, payMonthlyTotal]);
 
-    const handlePlaceOrder = async () => {
-        const validCards = [
-            { number: '4242424242424242', name: 'Test User', expiry: '12/25', cvv: '123' },
-            { number: '5555555555554444', name: 'Demo Account', expiry: '01/26', cvv: '456' },
-            { number: '378282246310005', name: 'Mock Payment', expiry: '06/27', cvv: '789' }
-        ];
-
-        const isValid = validCards.some(card => 
-            paymentData.cardNumber.replace(/\s/g, '') === card.number &&
-            paymentData.cardName.toLowerCase() === card.name.toLowerCase() &&
-            paymentData.expiry === card.expiry &&
-            paymentData.cvv === card.cvv
-        );
-
-        if (!isValid) {
-            setError('Invalid payment credentials. Use test cards: 4242 4242 4242 4242 (Test User, 12/25, 123)');
-            return;
+  useEffect(() => {
+    const init = async () => {
+      const sessionId = localStorage.getItem('sessionId');
+      if (!sessionId) { router.push('/cart'); return; }
+      try {
+        const s = await apiClient.createCheckoutSession(sessionId);
+        setSession(s);
+        if (s.devicePaymentDone) setDevicePaid(true);
+        const allBooked = s.broadbandBookingStatus && Object.values(s.broadbandBookingStatus).every(v => v !== 'unbooked');
+        if (allBooked && Object.keys(s.broadbandBookingStatus).length > 0) {
+          // Load appointment details for each booked item
+          const apptEntries: Record<string, Appointment> = {};
+          for (const [cartItemId, status] of Object.entries(s.broadbandBookingStatus)) {
+            if (status !== 'unbooked') {
+              try {
+                const appt = await apiClient.getAppointment(status);
+                apptEntries[cartItemId] = appt;
+              } catch {
+                // If we can't load appointment details, continue without them
+              }
+            }
+          }
+          setAppointments(apptEntries);
         }
 
-        setLoading(true);
-        
-        try {
-            // Get session ID
-            let sessionId = localStorage.getItem('sessionId');
-            if (!sessionId) {
-                sessionId = 'user123';
-                localStorage.setItem('sessionId', sessionId);
-            }
-            
-            // Create order via backend API
-            const shippingAddress = `${formData.address}, ${formData.city}, ${formData.zip}`;
-            const response = await fetch(`http://localhost:8080/api/orders?sessionId=${sessionId}&shippingAddress=${encodeURIComponent(shippingAddress)}&paymentMethod=Credit Card`, {
-                method: 'POST'
-            });
-            
-            if (!response.ok) {
-                throw new Error('Failed to create order');
-            }
-            
-            const order = await response.json();
-            console.log('Order created:', order);
-            
-            // Clear cart and redirect
-            clearCart();
-            router.push(`/tracking/${order.orderId}?confirmed=true`);
-        } catch (error) {
-            console.error('Order creation failed:', error);
-            setError('Failed to place order. Please try again.');
-            setLoading(false);
+        // Pre-populate About You from saved customer details and skip to payment
+        if (s.customerDetails && s.customerDetails.fullName) {
+          setAboutYou({
+            fullName: s.customerDetails.fullName,
+            email: s.customerDetails.email || '',
+            phone: s.customerDetails.phone || '',
+            address: s.customerDetails.address || '',
+          });
+          setStep('payment');
+        } else if (s.devicePaymentDone || allBooked) {
+          setStep('payment');
         }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load checkout.');
+      } finally {
+        setLoading(false);
+      }
     };
+    init();
+  }, [router]);
 
-    return (
-        <main className={`container ${styles.checkout}`}>
-            <h1 className={styles.checkout__title}>Checkout</h1>
+  const handleAboutSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!aboutYou.fullName.trim() || !aboutYou.email.trim() || !aboutYou.address.trim()) {
+      setAboutError('Please fill in all required fields.');
+      return;
+    }
+    setAboutError('');
+    setAboutSaving(true);
+    try {
+      const sessionId = localStorage.getItem('sessionId')!;
+      await apiClient.saveCustomerDetails(sessionId, {
+        fullName: aboutYou.fullName.trim(),
+        email: aboutYou.email.trim(),
+        phone: aboutYou.phone.trim(),
+        address: aboutYou.address.trim(),
+      });
+      setStep('payment');
+    } catch (err) {
+      setAboutError(err instanceof Error ? err.message : 'Failed to save your details. Please try again.');
+    } finally {
+      setAboutSaving(false);
+    }
+  };
 
-            {/* Progress */}
-            <div className={styles.checkout__progress}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: step >= 1 ? 1 : 0.5 }}>
-                    <div style={{ width: '2rem', height: '2rem', borderRadius: '50%', background: step >= 1 ? 'var(--primary)' : '#e5e7eb', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>1</div>
-                    <span style={{ fontWeight: 600 }}>Details</span>
-                </div>
-                <div style={{ width: '50px', height: '2px', background: '#e5e7eb', alignSelf: 'center' }} />
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: step >= 2 ? 1 : 0.5 }}>
-                    <div style={{ width: '2rem', height: '2rem', borderRadius: '50%', background: step >= 2 ? 'var(--primary)' : '#e5e7eb', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>2</div>
-                    <span style={{ fontWeight: 600 }}>Payment</span>
-                </div>
+  const handlePay = async (cardholderName: string, last4Digits: string) => {
+    const sessionId = localStorage.getItem('sessionId')!;
+    
+    // Prepare payment details with voucher information if available
+    const paymentDetails: { cardholderName: string; last4Digits: string; voucherDiscount?: number; voucherName?: string } = {
+      cardholderName,
+      last4Digits
+    };
+    
+    // Add voucher discount information if a device voucher is applied
+    if (appliedDeviceVoucher && deviceDiscount > 0) {
+      paymentDetails.voucherDiscount = deviceDiscount;
+      paymentDetails.voucherName = appliedDeviceVoucher.promotionName;
+    }
+    
+    // Snapshot device discount values before cart removal wipes them
+    if (appliedDeviceVoucher && deviceDiscount > 0) {
+      setSavedDeviceDiscount(deviceDiscount);
+      setSavedDiscountedTodayTotal(payTodayTotal);
+      setSavedDeviceVoucherName(appliedDeviceVoucher.promotionName);
+    }
+    
+    await apiClient.processDevicePayment(sessionId, paymentDetails);
+    setDevicePaid(true);
+    for (const item of items.filter(i => i.item_type !== 'broadband_service')) {
+      await removeFromCart(item.product.id);
+    }
+  };
+
+  const handleBookAppointment = async (date: string, slot: string, broadbandItemId: string) => {
+    const sessionId = localStorage.getItem('sessionId')!;
+    // Pass discounted monthly total if a broadband voucher is applied
+    const discountedMonthlyTotal = appliedBroadbandVoucher && broadbandDiscount > 0
+      ? payMonthlyTotal
+      : undefined;
+    const appt = await apiClient.bookAppointment({ sessionId, preferredDate: date, preferredTimeSlot: slot, broadbandItemId, discountedMonthlyTotal });
+    // Store appointment keyed by broadbandItemId
+    setAppointments(prev => ({ ...prev, [broadbandItemId]: appt }));
+    // Update broadbandBookingStatus for this specific item
+    setSession(prev => {
+      if (!prev) return prev;
+      const updatedStatus = { ...prev.broadbandBookingStatus, [broadbandItemId]: appt.appointmentId };
+      // Remove broadband items from cart once all are booked
+      const allBooked = Object.values(updatedStatus).every(v => v !== 'unbooked');
+      if (allBooked) {
+        // Snapshot discount values before cart removal wipes them
+        if (broadbandDiscount > 0) {
+          setSavedBroadbandDiscount(broadbandDiscount);
+          setSavedDiscountedMonthlyTotal(payMonthlyTotal);
+        }
+        for (const item of items.filter(i => i.item_type === 'broadband_service')) {
+          removeFromCart(item.product.id);
+        }
+      }
+      return { ...prev, broadbandBookingStatus: updatedStatus };
+    });
+  };
+
+  const handleCancelBroadbandItem = (broadbandItemId: string) => {
+    // Find the matching cart item to get the product ID for removal
+    const cartItem = items.find(i => {
+      if (i.item_type !== 'broadband_service') return false;
+      // Match by cartItemId from session serviceItems
+      const serviceItem = session?.serviceItems.find(si => si.cartItemId === broadbandItemId);
+      return serviceItem && (i.product.name === serviceItem.displayName || i.product.id === broadbandItemId);
+    });
+    if (cartItem) removeFromCart(cartItem.product.id);
+
+    // Update session state: remove the specific item
+    setSession(prev => {
+      if (!prev) return prev;
+      const updatedServiceItems = prev.serviceItems.filter(si => si.cartItemId !== broadbandItemId);
+      const updatedStatus = { ...prev.broadbandBookingStatus };
+      delete updatedStatus[broadbandItemId];
+      const hasBroadband = updatedServiceItems.length > 0;
+      const updatedMonthly = updatedServiceItems.reduce((sum, si) => sum + si.unitPrice, 0);
+      return {
+        ...prev,
+        serviceItems: updatedServiceItems,
+        broadbandBookingStatus: updatedStatus,
+        hasBroadbandService: hasBroadband,
+        monthlyTotal: updatedMonthly,
+      };
+    });
+
+    // Remove appointment for this item
+    setAppointments(prev => {
+      const updated = { ...prev };
+      delete updated[broadbandItemId];
+      return updated;
+    });
+  };
+
+  const handleCancelConfirm = async () => {
+    if (!cancelTarget || !session) return;
+    if (cancelTarget === 'broadband') {
+      // Cancel ALL broadband items
+      for (const item of items.filter(i => i.item_type === 'broadband_service')) {
+        await removeFromCart(item.product.id);
+      }
+      setSession(prev => prev ? { ...prev, hasBroadbandService: false, serviceItems: [], broadbandBookingStatus: {} } : prev);
+      setAppointments({});
+    } else {
+      for (const item of session.deviceItems) {
+        const cartItem = items.find(i => i.product.name === item.displayName || i.product.id === item.cartItemId);
+        if (cartItem) await removeFromCart(cartItem.product.id);
+      }
+      setSession(prev => prev ? { ...prev, hasDevices: false, deviceItems: [] } : prev);
+    }
+    setCancelTarget(null);
+  };
+
+  if (loading) return (
+    <main className="container" style={{ padding: '4rem 0', textAlign: 'center' }}>
+      <p style={{ color: '#6b7280' }}>Loading checkout…</p>
+    </main>
+  );
+
+  if (error && !session) return (
+    <main className="container" style={{ padding: '4rem 0', textAlign: 'center' }}>
+      <p style={{ color: '#ef4444', marginBottom: '1rem' }}>{error}</p>
+      <button onClick={() => router.push('/cart')} className="btn btn-primary">Back to Cart</button>
+    </main>
+  );
+
+  if (!session) return null;
+
+  const hasAnything = session.hasDevices || session.hasBroadbandService;
+
+  if (!hasAnything) return (
+    <main className="container" style={{ padding: '4rem 0', textAlign: 'center' }}>
+      <div className="card" style={{ padding: '3rem', maxWidth: '400px', margin: '0 auto' }}>
+        <p style={{ color: '#6b7280', marginBottom: '1.5rem' }}>Your cart is empty.</p>
+        <button onClick={() => router.push('/products')} className="btn btn-primary">Continue Shopping</button>
+      </div>
+    </main>
+  );
+
+  return (
+    <main className="container" style={{ padding: '2rem 0', maxWidth: '900px', margin: '0 auto' }}>
+      <h1 style={{ fontSize: '2rem', fontWeight: 800, marginBottom: '1.25rem' }}>Checkout</h1>
+
+      {/* Step indicator */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0', marginBottom: '2rem' }}>
+        {/* Step 1 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={{
+            width: '32px', height: '32px', borderRadius: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '0.85rem', fontWeight: 700,
+            background: step === 'about' ? '#2563eb' : '#16a34a',
+            color: '#fff',
+          }}>
+            {step === 'payment' ? '✓' : '1'}
+          </div>
+          <span style={{
+            fontSize: '0.9rem', fontWeight: step === 'about' ? 700 : 500,
+            color: step === 'about' ? '#111827' : '#16a34a',
+          }}>About You</span>
+        </div>
+
+        {/* Connector */}
+        <div style={{
+          flex: '0 0 60px', height: '2px', margin: '0 0.5rem',
+          background: step === 'payment' ? '#16a34a' : '#d1d5db',
+        }} />
+
+        {/* Step 2 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={{
+            width: '32px', height: '32px', borderRadius: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '0.85rem', fontWeight: 700,
+            background: step === 'payment' ? '#2563eb' : '#e5e7eb',
+            color: step === 'payment' ? '#fff' : '#9ca3af',
+          }}>
+            2
+          </div>
+          <span style={{
+            fontSize: '0.9rem', fontWeight: step === 'payment' ? 700 : 500,
+            color: step === 'payment' ? '#111827' : '#9ca3af',
+          }}>Payment</span>
+        </div>
+      </div>
+
+      {/* Step 1: About You */}
+      {step === 'about' && (
+        <div style={{ maxWidth: '560px' }}>
+          <div className="card" style={{ marginTop: '1.5rem' }}>
+            <h2 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1.25rem' }}>Your Details</h2>
+            <form onSubmit={handleAboutSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <Field label="Full name *" value={aboutYou.fullName} onChange={v => setAboutYou(p => ({ ...p, fullName: v }))} placeholder="Jane Smith" />
+              <Field label="Email address *" type="email" value={aboutYou.email} onChange={v => setAboutYou(p => ({ ...p, email: v }))} placeholder="jane@example.com" />
+              <Field label="Phone number" value={aboutYou.phone} onChange={v => setAboutYou(p => ({ ...p, phone: v }))} placeholder="+44 7700 900000" />
+              <Field label="Installation / delivery address *" value={aboutYou.address} onChange={v => setAboutYou(p => ({ ...p, address: v }))} placeholder="123 High Street, London, SW1A 1AA" />
+              {aboutError && <p role="alert" style={{ color: '#ef4444', fontSize: '0.85rem' }}>{aboutError}</p>}
+              <button type="submit" className="btn btn-primary" disabled={aboutSaving} style={{ padding: '0.9rem', fontSize: '1rem', marginTop: '0.25rem' }}>
+                {aboutSaving ? 'Saving…' : 'Continue to Payment'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Step 2: Payment — two columns */}
+      {step === 'payment' && (
+        <div>
+          {/* Compact about-you summary */}
+          {aboutYou.fullName && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', padding: '0.75rem 1rem', background: '#f9fafb', border: '1px solid var(--border)', borderRadius: '10px' }}>
+              <CheckCircle size={16} color="#16a34a" />
+              <span style={{ fontSize: '0.88rem', color: '#374151' }}>
+                <strong>{aboutYou.fullName}</strong> · {aboutYou.email}{aboutYou.address ? ` · ${aboutYou.address}` : ''}
+              </span>
+              <button onClick={() => setStep('about')} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#6b7280', fontSize: '0.82rem', cursor: 'pointer', textDecoration: 'underline' }}>Edit</button>
             </div>
+          )}
 
-            <div className="card">
-                {step === 1 ? (
-                    <form onSubmit={handleNext} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                        <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Shipping Information</h2>
+          {/* Stacked payment layout */}
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '1.5rem',
+          }}>
+            {session.hasDevices && (
+              <DevicePaymentSection
+                session={session}
+                devicePaid={devicePaid}
+                onPay={handlePay}
+                onCancel={() => setCancelTarget('devices')}
+                discountedTotal={savedDiscountedTodayTotal ?? (appliedDeviceVoucher && deviceDiscount > 0 ? payTodayTotal : undefined)}
+                deviceDiscount={savedDeviceDiscount ?? deviceDiscount}
+                voucherName={savedDeviceVoucherName ?? appliedDeviceVoucher?.promotionName}
+                initialCardholderName={autofillCard?.cardholderName}
+                initialLast4={autofillCard?.last4Digits}
+              />
+            )}
+            {session.hasBroadbandService && (
+              <BroadbandSection
+                session={session}
+                appointments={appointments}
+                onBook={handleBookAppointment}
+                onCancel={handleCancelBroadbandItem}
+                discountedMonthlyTotal={savedDiscountedMonthlyTotal ?? (appliedBroadbandVoucher && broadbandDiscount > 0 ? payMonthlyTotal : undefined)}
+                broadbandDiscount={savedBroadbandDiscount ?? broadbandDiscount}
+              />
+            )}
+          </div>
 
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                            <label style={{ fontWeight: 500, fontSize: '0.9rem' }}>Full Name</label>
-                            <input required name="name" value={formData.name} onChange={handleChange} style={{ padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)' }} />
-                        </div>
+          {/* Common actions — shown when everything is complete */}
+          {(() => {
+            const devDone = !session.hasDevices || devicePaid;
+            const bbDone = !session.hasBroadbandService || (
+              session.serviceItems.length > 0 &&
+              session.serviceItems.every(item =>
+                session.broadbandBookingStatus[item.cartItemId] &&
+                session.broadbandBookingStatus[item.cartItemId] !== 'unbooked'
+              )
+            );
+            if (devDone && bbDone) {
+              return (
+                <div style={{ marginTop: '2rem', padding: '1.25rem', background: '#f9fafb', border: '1px solid var(--border)', borderRadius: '12px', display: 'flex', gap: '0.75rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                  <Link href="/orders" className="btn btn-primary" style={{ padding: '0.7rem 1.5rem', fontSize: '0.9rem' }}>
+                    View Order Details
+                  </Link>
+                  <Link href="/bills" className="btn" style={{ padding: '0.7rem 1.5rem', fontSize: '0.9rem', border: '1.5px solid var(--primary)', color: 'var(--primary)', background: 'transparent' }}>
+                    My Active Bills
+                  </Link>
+                  <Link href="/products" className="btn" style={{ padding: '0.7rem 1.5rem', fontSize: '0.9rem', border: '1.5px solid #e5e7eb', color: '#6b7280', background: 'transparent' }}>
+                    Continue Shopping
+                  </Link>
+                </div>
+              );
+            }
+            return null;
+          })()}
+        </div>
+      )}
 
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                            <label style={{ fontWeight: 500, fontSize: '0.9rem' }}>Email</label>
-                            <input required type="email" name="email" value={formData.email} onChange={handleChange} style={{ padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)' }} />
-                        </div>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                            <label style={{ fontWeight: 500, fontSize: '0.9rem' }}>Address</label>
-                            <input required name="address" value={formData.address} onChange={handleChange} style={{ padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)' }} />
-                        </div>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                <label style={{ fontWeight: 500, fontSize: '0.9rem' }}>City</label>
-                                <input required name="city" value={formData.city} onChange={handleChange} style={{ padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)' }} />
-                            </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                <label style={{ fontWeight: 500, fontSize: '0.9rem' }}>Zip Code</label>
-                                <input required name="zip" value={formData.zip} onChange={handleChange} style={{ padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: '#111827' }} />
-                            </div>
-                        </div>
-
-                        <button type="submit" className="btn btn-primary" style={{ marginTop: '1rem' }}>
-                            Continue to Payment
-                        </button>
-                    </form>
-                ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                        <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Payment Details</h2>
-
-                        <div style={{ padding: '1rem', background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '8px' }}>
-                            <p style={{ fontWeight: 600, marginBottom: '0.5rem', fontSize: '0.9rem' }}>Test Payment Credentials:</p>
-                            <p style={{ fontSize: '0.85rem', color: '#0369a1', margin: '0.25rem 0' }}>• Card: 4242 4242 4242 4242 | Name: Test User | Exp: 12/25 | CVV: 123</p>
-                            <p style={{ fontSize: '0.85rem', color: '#0369a1', margin: '0.25rem 0' }}>• Card: 5555 5555 5555 4444 | Name: Demo Account | Exp: 01/26 | CVV: 456</p>
-                            <p style={{ fontSize: '0.85rem', color: '#0369a1', margin: '0.25rem 0' }}>• Card: 3782 8224 6310 005 | Name: Mock Payment | Exp: 06/27 | CVV: 789</p>
-                        </div>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                            <label style={{ fontWeight: 500, fontSize: '0.9rem' }}>Card Number</label>
-                            <input 
-                                required 
-                                name="cardNumber" 
-                                value={paymentData.cardNumber} 
-                                onChange={handlePaymentChange}
-                                placeholder="1234 5678 9012 3456"
-                                maxLength={19}
-                                style={{ padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)' }} 
-                            />
-                        </div>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                            <label style={{ fontWeight: 500, fontSize: '0.9rem' }}>Cardholder Name</label>
-                            <input 
-                                required 
-                                name="cardName" 
-                                value={paymentData.cardName} 
-                                onChange={handlePaymentChange}
-                                placeholder="John Doe"
-                                style={{ padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)' }} 
-                            />
-                        </div>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                <label style={{ fontWeight: 500, fontSize: '0.9rem' }}>Expiry Date</label>
-                                <input 
-                                    required 
-                                    name="expiry" 
-                                    value={paymentData.expiry} 
-                                    onChange={handlePaymentChange}
-                                    placeholder="MM/YY"
-                                    maxLength={5}
-                                    style={{ padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)' }} 
-                                />
-                            </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                <label style={{ fontWeight: 500, fontSize: '0.9rem' }}>CVV</label>
-                                <input 
-                                    required 
-                                    name="cvv" 
-                                    value={paymentData.cvv} 
-                                    onChange={handlePaymentChange}
-                                    placeholder="123"
-                                    maxLength={3}
-                                    style={{ padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)' }} 
-                                />
-                            </div>
-                        </div>
-
-                        {error && (
-                            <div style={{ padding: '0.75rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#dc2626', fontSize: '0.9rem' }}>
-                                {error}
-                            </div>
-                        )}
-
-                        <div style={{ padding: '1rem', background: '#f3f4f6', borderRadius: '8px' }}>
-                            <p style={{ fontSize: '0.9rem', color: '#6b7280' }}>Total: <strong style={{ fontSize: '1.25rem', color: '#111827' }}>${total.toFixed(2)}</strong></p>
-                        </div>
-
-                        <button
-                            onClick={handlePlaceOrder}
-                            disabled={loading}
-                            className="btn btn-primary"
-                            style={{ width: '100%', padding: '1rem', opacity: loading ? 0.7 : 1 }}
-                        >
-                            {loading ? 'Processing...' : `Pay ${total.toFixed(2)}`}
-                        </button>
-
-                        <button
-                            onClick={() => setStep(1)}
-                            style={{ alignSelf: 'center', color: '#6b7280', fontSize: '0.9rem', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer' }}
-                        >
-                            Back to Shipping
-                        </button>
-                    </div>
-                )}
-            </div>
-        </main>
-    );
+      <CancelModal
+        isOpen={cancelTarget !== null}
+        target={cancelTarget}
+        onConfirm={handleCancelConfirm}
+        onClose={() => setCancelTarget(null)}
+      />
+    </main>
+  );
 }
+
+function Field({ label, value, onChange, placeholder, type = 'text' }: {
+  label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string;
+}) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+      <label style={{ fontWeight: 500, fontSize: '0.88rem', color: '#374151' }}>{label}</label>
+      <input
+        type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+        style={{ padding: '0.7rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', fontSize: '0.9rem' }}
+      />
+    </div>
+  );
+}
+

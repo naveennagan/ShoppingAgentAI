@@ -13,7 +13,7 @@ export default function ChatBubble({ role, children }: ChatBubbleProps) {
             maxWidth: '88%'
         }}>
             {role === 'ai' && <Avatar />}
-            <div className={`chat-bubble chat-bubble--${role}`}>
+            <div className={`chat-bubble chat-bubble--${role}`} style={{ whiteSpace: 'pre-wrap' }}>
                 {children}
             </div>
         </div>

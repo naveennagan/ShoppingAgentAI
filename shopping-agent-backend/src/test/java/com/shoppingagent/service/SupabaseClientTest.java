@@ -98,8 +98,12 @@ class SupabaseClientTest {
     void post_buildsCorrectUrl() {
         supabaseClient.post("cart_items", "{\"session_id\":\"s1\"}");
 
-        assertEquals(1, recordedRequests.size());
-        RecordedRequest req = recordedRequests.get(0);
+        // Filter to find the POST to cart_items — other tests sharing the Spring context
+        // may have recorded requests before @BeforeEach cleared the list.
+        RecordedRequest req = recordedRequests.stream()
+                .filter(r -> "POST".equals(r.method()) && r.path().equals("/rest/v1/cart_items"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("No POST to /rest/v1/cart_items recorded"));
         assertEquals("POST", req.method());
         assertEquals("/rest/v1/cart_items", req.path());
     }

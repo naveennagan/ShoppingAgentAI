@@ -13,6 +13,14 @@ function ShoppingBagIcon({ className }: { className?: string }) {
     );
 }
 
+function BillsIcon({ className }: { className?: string }) {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+            <path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/><path d="M12 6v6l4 2"/>
+        </svg>
+    );
+}
+
 function OrdersIcon({ className }: { className?: string }) {
     return (
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
@@ -86,7 +94,9 @@ export default function Navbar({ onToggleChat, isChatOpen, chatWidth }: NavbarPr
 
                 <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
                     <NavLink href="/products">Products</NavLink>
+                    <NavLink href="/broadband">Broadband</NavLink>
                     <NavLink href="/orders" icon={<OrdersIcon />}>My Orders</NavLink>
+                    <NavLink href="/bills" icon={<BillsIcon />}>My Bills</NavLink>
                     <button
                         onClick={onToggleChat}
                         style={{

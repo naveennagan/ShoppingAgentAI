@@ -161,7 +161,7 @@ class ProductPersistenceProperties {
         productStore.clear();
 
         SupabaseClient client = buildClient();
-        ProductService service = new ProductService(client);
+        ProductService service = new ProductService(client, null);
 
         // Insert via SupabaseClient POST (simulating what a service would do)
         String json = gson.toJson(original);
@@ -199,7 +199,7 @@ class ProductPersistenceProperties {
         productStore.clear();
 
         SupabaseClient client = buildClient();
-        ProductService service = new ProductService(client);
+        ProductService service = new ProductService(client, null);
 
         String json = gson.toJson(original);
         String postResponse = client.post("products", json);

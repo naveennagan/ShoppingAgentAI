@@ -12,4 +12,5 @@ import java.util.List;
 public class CouponValidationRequest {
     private String code;
     private List<String> productIds;
+    private String itemType;
 }

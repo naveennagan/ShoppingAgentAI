@@ -1,13 +1,6 @@
 import React, { useState } from 'react';
 import { useCart } from '@/context/CartContext';
-
-interface Product {
-  id: number;
-  name: string;
-  price: number;
-  description: string;
-  image: string;
-}
+import { Product } from '@/lib/products';
 
 interface ProductWidgetProps {
   product: Product;

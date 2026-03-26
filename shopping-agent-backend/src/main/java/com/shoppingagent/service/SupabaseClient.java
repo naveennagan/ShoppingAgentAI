@@ -99,6 +99,42 @@ public class SupabaseClient {
         return execute(request);
     }
 
+    /**
+     * POST request with upsert semantics (merge duplicates on conflict).
+     *
+     * @param table       the table name
+     * @param queryParams PostgREST query params (e.g., "on_conflict=source_type,source_id")
+     * @param jsonBody    JSON body to upsert
+     * @return the JSON response body
+     */
+    public String upsert(String table, String queryParams, String jsonBody) {
+        String url = buildUrl(table, queryParams);
+        HttpRequest request = baseRequest(url)
+                .header("Prefer", "resolution=merge-duplicates,return=representation")
+                .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                .build();
+        return execute(request);
+    }
+
+    /**
+     * POST request to call a Supabase RPC function.
+     *
+     * @param functionName the name of the database function
+     * @param jsonBody     JSON body with function parameters
+     * @return the JSON response body
+     */
+    public String rpc(String functionName, String jsonBody) {
+        String base = supabaseUrl.endsWith("/") ? supabaseUrl : supabaseUrl + "/";
+        String url = base + "rest/v1/rpc/" + functionName;
+        HttpRequest request = baseRequest(url)
+                .header("Prefer", "return=representation")
+                .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                .build();
+        return execute(request);
+    }
+
+
+
     private String buildUrl(String table, String queryParams) {
         String base = supabaseUrl.endsWith("/") ? supabaseUrl : supabaseUrl + "/";
         String url = base + "rest/v1/" + table;
@@ -119,7 +155,15 @@ public class SupabaseClient {
     private String execute(HttpRequest request) {
         try {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            int status = response.statusCode();
+            if (status < 200 || status >= 300) {
+                throw new SupabaseConnectionException(
+                        "Supabase returned HTTP " + status + " for " + request.method()
+                                + " " + request.uri().getPath() + ": " + response.body(), null);
+            }
             return response.body();
+        } catch (SupabaseConnectionException e) {
+            throw e;
         } catch (IOException e) {
             throw new SupabaseConnectionException("Failed to connect to Supabase: " + e.getMessage(), e);
         } catch (InterruptedException e) {

@@ -18,6 +18,9 @@ public class Order {
     private LocalDateTime orderDate;
     private String shippingAddress;
     private String paymentMethod;
+    private String orderType;
+    private String serviceStatus;
+    private double monthlyTotal;
     
     @Data
     @NoArgsConstructor

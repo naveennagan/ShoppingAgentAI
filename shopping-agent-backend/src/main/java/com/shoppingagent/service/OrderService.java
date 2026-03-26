@@ -46,6 +46,7 @@ public class OrderService {
 
         List<Order.OrderItem> orderItems = new ArrayList<>();
         double totalAmount = 0.0;
+        double totalSavings = 0.0;
 
         for (Cart.CartItem cartItem : cart.getItems()) {
             Optional<Product> product = productService.getProductById(cartItem.getProductId());
@@ -65,6 +66,7 @@ public class OrderService {
                         effectivePrice = DiscountCalculator.calculateDiscountedPrice(
                                 originalPrice, promo.getDiscountType(), promo.getDiscountValue());
                         promotionalLabel = promo.getPromotionalLabel();
+                        totalSavings += (originalPrice - effectivePrice) * cartItem.getQuantity();
                     }
                 } catch (Exception e) {
                     logger.warn("Failed to fetch promotions for product {}, using original price", p.getId(), e);
@@ -84,6 +86,9 @@ public class OrderService {
         orderRow.put("status", "CONFIRMED");
         orderRow.put("shipping_address", shippingAddress);
         orderRow.put("payment_method", paymentMethod);
+        if (totalSavings > 0) {
+            orderRow.put("total_savings", totalSavings);
+        }
 
         String orderJson = supabaseClient.post("orders", gson.toJson(orderRow));
         List<OrderRow> created = gson.fromJson(orderJson, ORDER_ROW_LIST);
@@ -107,10 +112,11 @@ public class OrderService {
         }
 
         cartService.clearCart(sessionId);
-        logger.info("Order {} created for session {}", orderId, sessionId);
+        logger.info("Order {} created for session {} with total savings: £{}", orderId, sessionId, totalSavings);
 
         return new Order(orderId, sessionId, orderItems, totalAmount,
-                "CONFIRMED", java.time.LocalDateTime.now(), shippingAddress, paymentMethod);
+                "CONFIRMED", java.time.LocalDateTime.now(), shippingAddress, paymentMethod,
+                null, null, 0.0);
     }
 
     public List<Order> getOrdersBySession(String sessionId) {
@@ -134,8 +140,8 @@ public class OrderService {
      */
     @Scheduled(fixedRate = 3_600_000)
     public void deleteOldOrders() {
-        String cutoff = OffsetDateTime.now().minusDays(3)
-                .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+        String cutoff = OffsetDateTime.now(java.time.ZoneOffset.UTC).minusDays(3)
+                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'"));
         logger.info("Cleaning up orders older than {}", cutoff);
         supabaseClient.delete("orders", "created_at=lt." + cutoff);
     }
@@ -155,7 +161,8 @@ public class OrderService {
                 : java.time.LocalDateTime.now();
 
         return new Order(row.id, row.session_id, items, row.total_amount,
-                row.status, date, row.shipping_address, row.payment_method);
+                row.status, date, row.shipping_address, row.payment_method,
+                row.order_type, row.service_status, row.monthly_total);
     }
 
     // --- Supabase row POJOs ---
@@ -168,6 +175,9 @@ public class OrderService {
         String shipping_address;
         String payment_method;
         String created_at;
+        String order_type;
+        String service_status;
+        double monthly_total;
         List<OrderItemRow> order_items;
     }
 
