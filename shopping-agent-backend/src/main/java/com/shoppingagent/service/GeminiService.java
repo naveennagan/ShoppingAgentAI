@@ -176,7 +176,7 @@ public class GeminiService {
                "- List available coupons/promotions and apply or remove them\n\n" +
                "RESPONSE FORMAT:\n" +
                "You MUST respond with a JSON object containing:\n" +
-               "{\"action\": \"NAVIGATE\" | \"ADD_TO_CART\" | \"CLEAR_CART\" | \"SHOW_PRODUCTS\" | \"APPLY_COUPON\" | \"REMOVE_COUPON\" | \"ADVANCE_STEP\" | \"NONE\", " +
+               "{\"action\": \"NAVIGATE\" | \"ADD_TO_CART\" | \"CLEAR_CART\" | \"SHOW_PRODUCTS\" | \"APPLY_COUPON\" | \"REMOVE_COUPON\" | \"AUTOFILL_CHECKOUT\" | \"EDIT_CHECKOUT\" | \"FETCH_ORDERS\" | \"ADVANCE_STEP\" | \"NONE\", " +
                "\"payload\": \"URL path\" | \"Product ID\" | \"Comma-separated Product IDs\" | {\"code\": \"PROMO_CODE\", \"itemType\": \"device\" | \"broadband\" | \"both\"} | null, " +
                "\"message\": \"Helpful response to user\", " +
                "\"summaryCards\": [{\"type\": \"product\" | \"broadband\", \"id\": \"UUID\", \"name\": \"...\", \"price\": 0.0, \"brand\": \"...\", \"rating\": 0.0, " +
@@ -219,6 +219,7 @@ public class GeminiService {
                "INSTALLATION DATE QUERY RECOGNITION:\n" +
                "- When the user asks about installation dates, appointment scheduling, or engineer visits (e.g., 'confirm installation on 5 Apr', 'when is my installation', 'book installation', 'available installation dates', 'engineer visit'), route the request to the appointment service. Use action 'BOOK_APPOINTMENT' with the requested date/time in the payload, or action 'CHECK_APPOINTMENT' to retrieve existing appointment details. Do NOT deflect installation queries to customer support.\n\n" +
                "IMPORTANT RULES:\n" +
+               "- ORDERS: When user says 'view my orders', 'show my orders', 'what are my orders', use FETCH_ORDERS to display order details in chat. When user says 'go to orders', 'take me to orders', 'open orders page', use NAVIGATE with '/orders'.\n" +
                "- When user asks to see/show/display products, ALWAYS use SHOW_PRODUCTS action\n" +
                "- Include relevant product IDs in payload as comma-separated string\n" +
                "- Never use NONE action for product display requests\n" +
@@ -226,7 +227,20 @@ public class GeminiService {
                "- When showing cart contents, ALWAYS separate devices and broadband. Show device items with 'Pay Today' total and broadband items with 'Monthly' total. NEVER add device and broadband prices together into a single total. Show applied coupons per category.\n" +
                "- If the user asks about broadband, fibre, internet plans, or anything broadband-related, DO NOT say you don't have broadband. Acknowledge what they are looking for and ask for their UK postcode so you can check broadband availability at their address. If a SYSTEM CONTEXT is provided about a broadband guided flow, follow those instructions.\n" +
                "- Use the source IDs from the RELEVANT CONTEXT when referencing products or plans\n" +
-               "- ADVANCE_STEP: When a SYSTEM CONTEXT mentions a broadband guided flow step and the user clearly wants to skip, move on, proceed, or is done with the current optional step (add-ons, TV packages, SIM plans, home phone), use action ADVANCE_STEP. This tells the frontend to move to the next step. Include a brief friendly message acknowledging their choice.");
+               "- ADVANCE_STEP: When a SYSTEM CONTEXT mentions a broadband guided flow step and the user clearly wants to skip, move on, proceed, or is done with the current optional step (add-ons, TV packages, SIM plans, home phone), use action ADVANCE_STEP. This tells the frontend to move to the next step. Include a brief friendly message acknowledging their choice.\n\n" +
+               "CHECKOUT ACTIONS:\n" +
+               "The checkout has two sections with DIFFERENT fields. You MUST use the exact field names below.\n" +
+               "ABOUT YOU section fields: fullName, email, phone, address\n" +
+               "PAYMENT section fields: cardholderName, last4Digits\n" +
+               "- AUTOFILL_CHECKOUT: Fills all checkout fields and navigates to payment. Payload: {\"fullName\":\"...\",\"email\":\"...\",\"phone\":\"...\",\"address\":\"...\",\"cardholderName\":\"...\",\"last4Digits\":\"....\"}. All fields optional, defaults used if omitted.\n" +
+               "- EDIT_CHECKOUT: Updates specific fields without navigating. Only include the fields being changed.\n" +
+               "  Examples:\n" +
+               "  'change my name to Sarah' → {\"action\":\"EDIT_CHECKOUT\",\"payload\":{\"fullName\":\"Sarah\"},\"message\":\"Updated your name to Sarah.\"}\n" +
+               "  'change cardholder name to Bob' or 'change card name to Bob' → {\"action\":\"EDIT_CHECKOUT\",\"payload\":{\"cardholderName\":\"Bob\"},\"message\":\"Updated cardholder name to Bob.\"}\n" +
+               "  'update card to 5678' or 'change last 4 digits to 5678' → {\"action\":\"EDIT_CHECKOUT\",\"payload\":{\"last4Digits\":\"5678\"},\"message\":\"Updated card digits.\"}\n" +
+               "  'change email to x@y.com' → {\"action\":\"EDIT_CHECKOUT\",\"payload\":{\"email\":\"x@y.com\"},\"message\":\"Updated email.\"}\n" +
+               "  'fill card as Jane and 6345' → {\"action\":\"AUTOFILL_CHECKOUT\",\"payload\":{\"cardholderName\":\"Jane\",\"last4Digits\":\"6345\"},\"message\":\"Filled card details.\"}\n" +
+               "DISAMBIGUATION: 'name' alone means fullName (About You). 'cardholder name' or 'card name' means cardholderName (Payment). A 4-digit number always means last4Digits.");
 
         return prompt.toString();
     }
@@ -295,7 +309,7 @@ public class GeminiService {
                "- List available coupons/promotions and apply or remove them\n\n" +
                "RESPONSE FORMAT:\n" +
                "You MUST respond with a JSON object containing:\n" +
-               "{\"action\": \"NAVIGATE\" | \"ADD_TO_CART\" | \"CLEAR_CART\" | \"SHOW_PRODUCTS\" | \"APPLY_COUPON\" | \"REMOVE_COUPON\" | \"ADVANCE_STEP\" | \"NONE\", " +
+               "{\"action\": \"NAVIGATE\" | \"ADD_TO_CART\" | \"CLEAR_CART\" | \"SHOW_PRODUCTS\" | \"APPLY_COUPON\" | \"REMOVE_COUPON\" | \"AUTOFILL_CHECKOUT\" | \"EDIT_CHECKOUT\" | \"FETCH_ORDERS\" | \"ADVANCE_STEP\" | \"NONE\", " +
                "\"payload\": \"URL path\" | \"Product ID\" | \"Comma-separated Product IDs\" | {\"code\": \"PROMO_CODE\", \"itemType\": \"device\" | \"broadband\" | \"both\"} | null, " +
                "\"message\": \"Helpful response to user\"}\n\n" +
                "COUPON/PROMOTION RULES:\n" +
@@ -315,16 +329,31 @@ public class GeminiService {
                "User: \"Show me iPhones\" → {\"action\":\"SHOW_PRODUCTS\",\"payload\":\"1,2\",\"message\":\"Here are our iPhones:\"}\n" +
                "User: \"Add iPhone to cart\" → {\"action\":\"ADD_TO_CART\",\"payload\":\"1\",\"message\":\"Added iPhone to your cart!\"}\n" +
                "User: \"Go to checkout\" → {\"action\":\"NAVIGATE\",\"payload\":\"/checkout\",\"message\":\"Taking you to checkout...\"}\n" +
-               "User: \"Show my orders\" → {\"action\":\"NAVIGATE\",\"payload\":\"/orders\",\"message\":\"Here are your orders...\"}\n" +
+               "User: \"Show my orders\" → {\"action\":\"FETCH_ORDERS\",\"payload\":null,\"message\":\"Let me check your orders...\"}\n" +
+               "User: \"Go to my orders\" → {\"action\":\"NAVIGATE\",\"payload\":\"/orders\",\"message\":\"Taking you to the orders page.\"}\n" +
                "User: \"Clear my cart\" → {\"action\":\"CLEAR_CART\",\"payload\":null,\"message\":\"Cart cleared!\"}\n\n" +
                "IMPORTANT RULES:\n" +
+               "- ORDERS: When user says 'view my orders', 'show my orders', 'what are my orders', use FETCH_ORDERS to display order details in chat. When user says 'go to orders', 'take me to orders', 'open orders page', use NAVIGATE with '/orders'.\n" +
                "- When user asks to see/show/display products, ALWAYS use SHOW_PRODUCTS action\n" +
                "- Include relevant product IDs in payload as comma-separated string\n" +
                "- Never use NONE action for product display requests\n" +
                "- When the user asks about their cart contents and the cart is empty, clearly tell them their cart is empty and suggest browsing products. Do NOT navigate to /cart or show checkout options for an empty cart.\n" +
                "- When showing cart contents, ALWAYS separate devices and broadband. Show device items with 'Pay Today' total and broadband items with 'Monthly' total. NEVER add device and broadband prices together into a single total. Show applied coupons per category.\n" +
                "- If the user asks about broadband, fibre, internet plans, or anything broadband-related, DO NOT say you don't have broadband. Acknowledge what they are looking for and ask for their UK postcode so you can check broadband availability at their address. If a SYSTEM CONTEXT is provided about a broadband guided flow, follow those instructions.\n" +
-               "- ADVANCE_STEP: When a SYSTEM CONTEXT mentions a broadband guided flow step and the user clearly wants to skip, move on, proceed, or is done with the current optional step (add-ons, TV packages, SIM plans, home phone), use action ADVANCE_STEP. This tells the frontend to move to the next step. Include a brief friendly message acknowledging their choice.");
+               "- ADVANCE_STEP: When a SYSTEM CONTEXT mentions a broadband guided flow step and the user clearly wants to skip, move on, proceed, or is done with the current optional step (add-ons, TV packages, SIM plans, home phone), use action ADVANCE_STEP. This tells the frontend to move to the next step. Include a brief friendly message acknowledging their choice.\n\n" +
+               "CHECKOUT ACTIONS:\n" +
+               "The checkout has two sections with DIFFERENT fields. You MUST use the exact field names below.\n" +
+               "ABOUT YOU section fields: fullName, email, phone, address\n" +
+               "PAYMENT section fields: cardholderName, last4Digits\n" +
+               "- AUTOFILL_CHECKOUT: Fills all checkout fields and navigates to payment. Payload: {\"fullName\":\"...\",\"email\":\"...\",\"phone\":\"...\",\"address\":\"...\",\"cardholderName\":\"...\",\"last4Digits\":\"....\"}. All fields optional, defaults used if omitted.\n" +
+               "- EDIT_CHECKOUT: Updates specific fields without navigating. Only include the fields being changed.\n" +
+               "  Examples:\n" +
+               "  'change my name to Sarah' → {\"action\":\"EDIT_CHECKOUT\",\"payload\":{\"fullName\":\"Sarah\"},\"message\":\"Updated your name to Sarah.\"}\n" +
+               "  'change cardholder name to Bob' or 'change card name to Bob' → {\"action\":\"EDIT_CHECKOUT\",\"payload\":{\"cardholderName\":\"Bob\"},\"message\":\"Updated cardholder name to Bob.\"}\n" +
+               "  'update card to 5678' or 'change last 4 digits to 5678' → {\"action\":\"EDIT_CHECKOUT\",\"payload\":{\"last4Digits\":\"5678\"},\"message\":\"Updated card digits.\"}\n" +
+               "  'change email to x@y.com' → {\"action\":\"EDIT_CHECKOUT\",\"payload\":{\"email\":\"x@y.com\"},\"message\":\"Updated email.\"}\n" +
+               "  'fill card as Jane and 6345' → {\"action\":\"AUTOFILL_CHECKOUT\",\"payload\":{\"cardholderName\":\"Jane\",\"last4Digits\":\"6345\"},\"message\":\"Filled card details.\"}\n" +
+               "DISAMBIGUATION: 'name' alone means fullName (About You). 'cardholder name' or 'card name' means cardholderName (Payment). A 4-digit number always means last4Digits.");
         return prompt.toString();
     }
     

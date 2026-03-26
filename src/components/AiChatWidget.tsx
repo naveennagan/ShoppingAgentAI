@@ -87,8 +87,32 @@ export default function AiChatWidget() {
             } else if (data.action === 'CLEAR_CART') {
                 clearCart();
             } else if (data.action === 'AUTOFILL_CHECKOUT' && data.payload) {
-                const event = new CustomEvent('autofill-checkout', { detail: JSON.parse(data.payload) });
-                window.dispatchEvent(event);
+                const detail = typeof data.payload === 'string' ? JSON.parse(data.payload) : data.payload;
+                window.dispatchEvent(new CustomEvent('autofill-checkout', { detail }));
+            } else if (data.action === 'EDIT_CHECKOUT' && data.payload) {
+                const detail = typeof data.payload === 'string' ? JSON.parse(data.payload) : data.payload;
+                window.dispatchEvent(new CustomEvent('edit-checkout', { detail }));
+            } else if (data.action === 'FETCH_ORDERS') {
+                try {
+                    const sessionId = localStorage.getItem('sessionId') || '';
+                    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+                    const res = await fetch(`${API_URL}/api/orders?sessionId=${sessionId}`);
+                    if (res.ok) {
+                        const orders = await res.json();
+                        if (!orders || orders.length === 0) {
+                            data.message = "You don't have any orders yet. Start shopping and place an order to see it here!";
+                        } else {
+                            const lines = orders.map((o: any) => {
+                                const date = o.orderDate ? new Date(o.orderDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A';
+                                const items = o.items?.map((i: any) => `${i.productName} ×${i.quantity}`).join(', ') || 'No items';
+                                const type = o.orderType === 'service' ? '📡 Broadband' : '📦 Device';
+                                const total = o.orderType === 'service' ? `£${o.monthlyTotal?.toFixed(2)}/mo` : `£${o.totalAmount?.toFixed(2)}`;
+                                return `• ${type} — ${items}\n  ${date} · ${o.status} · ${total}`;
+                            }).join('\n\n');
+                            data.message = `You have ${orders.length} order${orders.length > 1 ? 's' : ''}:\n\n${lines}`;
+                        }
+                    }
+                } catch { /* fall through with original message */ }
             }
             
             setMessages(prev => [...prev, { role: 'ai', text: data.message }]);

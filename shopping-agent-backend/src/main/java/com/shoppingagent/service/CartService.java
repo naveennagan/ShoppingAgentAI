@@ -33,7 +33,7 @@ public class CartService {
         List<Cart.CartItem> items = new ArrayList<>();
         if (rows != null) {
             for (CartItemRow row : rows) {
-                items.add(new Cart.CartItem(row.product_id, row.quantity,
+                items.add(new Cart.CartItem(row.id, row.product_id, row.quantity,
                         row.item_type, row.display_name, row.display_summary, row.unit_price));
             }
         }
@@ -144,6 +144,7 @@ public class CartService {
 
     /** Internal row type for deserializing cart_items rows with product_id and quantity. */
     private static class CartItemRow {
+        String id;
         String product_id;
         String item_type;
         String display_name;

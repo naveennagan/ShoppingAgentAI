@@ -29,7 +29,8 @@ CORE PRINCIPLES:
 8. EXECUTE ACTIONS: When user wants to add/remove/update/checkout, use the appropriate action. Don't just talk about it.
 9. UPDATE QUANTITIES: When user says "make it 1", "change to 2", "set quantity to 1", use update_quantity action with {productId: "id", quantity: number}.
 10. REMOVE ITEMS: When user says "remove", "delete", use remove_from_cart action with productId.
-11. AUTOFILL AND CHECKOUT: When user wants to autofill and go to payment, use autofill_checkout action (it will auto-navigate and auto-advance to payment step).
+11. AUTOFILL AND CHECKOUT: When user wants to autofill and go to payment, use autofill_checkout action with payload {cardholderName, last4Digits}. Parse user input intelligently: "fill card details as Jane and 6345" means cardholderName="Jane", last4Digits="6345". The first text value is the cardholder name, any 4-digit number is the last 4 digits. Always include both in the payload when provided.
+12. EDIT CHECKOUT FIELDS: When user is already on checkout and wants to change a specific field, use edit_checkout action. Examples: "change name to Sarah" → {fullName:"Sarah"}, "update card to 5678" → {last4Digits:"5678"}, "change cardholder to Bob" → {cardholderName:"Bob"}, "change email to x@y.com" → {email:"x@y.com"}. Only include the fields being changed.
 
 You have access to all products, cart data, and deals in the schema. Use that information to answer any question.
 `;

@@ -16,6 +16,7 @@ public class Cart {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class CartItem {
+        private String id;
         private String productId;
         private int quantity;
         private String itemType;       // "device" | "broadband_service"

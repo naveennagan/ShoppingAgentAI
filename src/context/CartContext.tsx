@@ -57,6 +57,7 @@ export interface CartItem {
     display_name?: string;
     display_summary?: string;
     unit_price?: number;
+    cart_item_id?: string; // Backend row ID from cart_items table
 }
 
 interface CartContextType {
@@ -159,6 +160,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
                             display_name: item.displayName,
                             display_summary: item.displaySummary,
                             unit_price: item.unitPrice,
+                            cart_item_id: item.id,
                         };
                     }
                     const product = products.find((p: Product) => p.id === item.productId);
@@ -330,7 +332,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         };
 
         try {
-            await apiClient.addBroadbandServiceToCart(SESSION_ID, {
+            const updatedCart = await apiClient.addBroadbandServiceToCart(SESSION_ID, {
                 itemId: broadbandItem.product.id,
                 name: plan.name,
                 price: effectivePrice,
@@ -342,6 +344,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
                 display_summary: summary,
                 unit_price: effectivePrice,
             });
+
+            // Get the cart_item_id from the backend response
+            const backendBroadbandItem = updatedCart?.items?.find((i: any) => i.itemType === 'broadband_service');
+            if (backendBroadbandItem?.id) {
+                broadbandItem.cart_item_id = backendBroadbandItem.id;
+            }
 
             // Replace any existing broadband service item — only one at a time
             setItems(prev => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { CheckoutSession, CheckoutCartItem } from '@/types/checkout';
 import { CheckCircle } from 'lucide-react';
 
@@ -12,15 +12,22 @@ interface Props {
   discountedTotal?: number;
   deviceDiscount?: number;
   voucherName?: string;
+  initialCardholderName?: string;
+  initialLast4?: string;
 }
 
-export default function DevicePaymentSection({ session, devicePaid, onPay, onCancel, discountedTotal, deviceDiscount, voucherName }: Props) {
+export default function DevicePaymentSection({ session, devicePaid, onPay, onCancel, discountedTotal, deviceDiscount, voucherName, initialCardholderName, initialLast4 }: Props) {
   const hasDiscount = discountedTotal != null && deviceDiscount != null && deviceDiscount > 0;
   const totalDue = hasDiscount ? discountedTotal! : session.oneTimeTotal;
-  const [cardholderName, setCardholderName] = useState('');
-  const [last4, setLast4] = useState('');
+  const [cardholderName, setCardholderName] = useState(initialCardholderName || '');
+  const [last4, setLast4] = useState(initialLast4 || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (initialCardholderName) setCardholderName(initialCardholderName);
+    if (initialLast4) setLast4(initialLast4);
+  }, [initialCardholderName, initialLast4]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

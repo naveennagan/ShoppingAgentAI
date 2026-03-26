@@ -500,13 +500,21 @@ export function useGuidedFlow() {
             const { apiClient } = await import('@/lib/api-client');
             const broadbandItem = cart.find(item => item.item_type === 'broadband_service');
             const appointment = await apiClient.bookAppointment({
-                sessionId: broadbandItem?.broadband_ref ?? '',
+                sessionId: localStorage.getItem('sessionId') || '',
                 preferredDate: date,
                 preferredTimeSlot: slot,
-                broadbandItemId: broadbandItem?.product.id,
+                broadbandItemId: broadbandItem?.cart_item_id || broadbandItem?.product.id,
             });
             setLastAppointmentId(appointment.appointmentId);
             setPendingSlots([]);
+            // Notify checkout page to refresh its state
+            window.dispatchEvent(new CustomEvent('appointment-booked', {
+                detail: {
+                    appointmentId: appointment.appointmentId,
+                    broadbandItemId: broadbandItem?.cart_item_id || broadbandItem?.product.id,
+                    appointment,
+                },
+            }));
             addAiMessage(formatBookingConfirmation(appointment), {
                 suggestedActions: guidedFlowRef.current.active ? ['Go back', 'Cancel'] : ['Check my installation'],
             });
@@ -1207,6 +1215,36 @@ export function useGuidedFlow() {
                 } else if (act.action === 'autofill_checkout') {
                     window.dispatchEvent(new CustomEvent('autofill-checkout', { detail: act.payload || {} }));
                     setTimeout(() => router.push('/checkout'), 100);
+                } else if (act.action === 'edit_checkout') {
+                    window.dispatchEvent(new CustomEvent('edit-checkout', { detail: act.payload || {} }));
+                } else if (act.action === 'fetch_orders') {
+                    try {
+                        const sessionId = localStorage.getItem('sessionId') || '';
+                        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+                        const res = await fetch(`${API_URL}/api/orders?sessionId=${sessionId}`);
+                        if (!res.ok) throw new Error('Failed to fetch orders');
+                        const orders = await res.json();
+                        if (!orders || orders.length === 0) {
+                            addAiMessage("You don't have any orders yet. Start shopping and place an order to see it here!", {
+                                suggestedActions: ['Browse products', 'Show deals'],
+                            });
+                        } else {
+                            const lines = orders.map((o: any) => {
+                                const date = o.orderDate ? new Date(o.orderDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A';
+                                const items = o.items?.map((i: any) => `${i.productName} ×${i.quantity}`).join(', ') || 'No items';
+                                const type = o.orderType === 'service' ? '📡 Broadband' : '📦 Device';
+                                const total = o.orderType === 'service' ? `£${o.monthlyTotal?.toFixed(2)}/mo` : `£${o.totalAmount?.toFixed(2)}`;
+                                return `• ${type} — ${items}\n  ${date} · ${o.status} · ${total}`;
+                            }).join('\n\n');
+                            addAiMessage(`You have ${orders.length} order${orders.length > 1 ? 's' : ''}:\n\n${lines}`, {
+                                suggestedActions: ['Go to orders page', 'Continue shopping'],
+                            });
+                        }
+                    } catch {
+                        addAiMessage("Sorry, I couldn't load your orders right now. You can view them on the orders page.", {
+                            suggestedActions: ['Go to orders page'],
+                        });
+                    }
                 } else if (act.action === 'apply_coupon') {
                     try {
                         // Handle array payload: [{code, itemType}, ...]

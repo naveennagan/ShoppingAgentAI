@@ -48,6 +48,117 @@ export default function CheckoutPage() {
   // Cancel modal
   const [cancelTarget, setCancelTarget] = useState<'devices' | 'broadband' | null>(null);
 
+  // Autofill card details from AI assistant
+  const [autofillCard, setAutofillCard] = useState<{ cardholderName?: string; last4Digits?: string } | null>(null);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const d = (e as CustomEvent).detail || {};
+      // Normalize field names — the LLM may use various naming conventions
+      const cardholderName = d.cardholderName || d.cardName || d.cardholder_name || d.name;
+      const last4Digits = d.last4Digits || d.cardNumber || d.last4 || d.card_number || d.lastFour;
+      const fullName = d.fullName || d.full_name;
+      const email = d.email;
+      const phone = d.phone;
+      const address = d.address;
+
+      // Auto-fill About You — only overwrite fields that are currently empty
+      setAboutYou(prev => ({
+        fullName: prev.fullName || fullName || 'John Doe',
+        email: prev.email || email || 'john@example.com',
+        phone: prev.phone || phone || '+44 7700 900000',
+        address: prev.address || address || '123 AI Boulevard, London, SW1A 1AA',
+      }));
+      // Store card details for DevicePaymentSection
+      if (cardholderName || last4Digits) {
+        setAutofillCard(prev => ({
+          cardholderName: cardholderName || prev?.cardholderName,
+          last4Digits: last4Digits || prev?.last4Digits,
+        }));
+      }
+      // Auto-save customer details and advance to payment
+      const sessionId = localStorage.getItem('sessionId');
+      setAboutYou(current => {
+        const toSave = { ...current };
+        if (sessionId) {
+          apiClient.saveCustomerDetails(sessionId, toSave).then(() => {
+            setStep('payment');
+          }).catch(() => {
+            setStep('payment');
+          });
+        } else {
+          setStep('payment');
+        }
+        return current;
+      });
+    };
+    window.addEventListener('autofill-checkout', handler);
+    return () => window.removeEventListener('autofill-checkout', handler);
+  }, []);
+
+  // Listen for AI-driven field edits on the checkout form
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const d = (e as CustomEvent).detail || {};
+      // Normalize field names
+      const cardholderName = d.cardholderName || d.cardName || d.cardholder_name || d.name;
+      const last4Digits = d.last4Digits || d.cardNumber || d.last4 || d.card_number || d.lastFour;
+      const fullName = d.fullName || d.full_name;
+      const email = d.email;
+      const phone = d.phone;
+      const address = d.address;
+
+      // Update About You fields if provided
+      if (fullName || email || phone || address) {
+        setAboutYou(prev => ({
+          fullName: fullName ?? prev.fullName,
+          email: email ?? prev.email,
+          phone: phone ?? prev.phone,
+          address: address ?? prev.address,
+        }));
+        const sessionId = localStorage.getItem('sessionId');
+        if (sessionId) {
+          setAboutYou(current => {
+            apiClient.saveCustomerDetails(sessionId, { ...current }).catch(() => {});
+            return current;
+          });
+        }
+      }
+      // Update card details if provided
+      if (cardholderName || last4Digits) {
+        setAutofillCard(prev => ({
+          cardholderName: cardholderName ?? prev?.cardholderName,
+          last4Digits: last4Digits ?? prev?.last4Digits,
+        }));
+      }
+    };
+    window.addEventListener('edit-checkout', handler);
+    return () => window.removeEventListener('edit-checkout', handler);
+  }, []);
+
+  // Listen for appointments booked via AI chat and update checkout state
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { broadbandItemId, appointment } = (e as CustomEvent).detail || {};
+      if (!broadbandItemId || !appointment) return;
+      // Update appointments map
+      setAppointments(prev => ({ ...prev, [broadbandItemId]: appointment }));
+      // Update session booking status
+      setSession(prev => {
+        if (!prev) return prev;
+        const updatedStatus = { ...prev.broadbandBookingStatus, [broadbandItemId]: appointment.appointmentId };
+        const allBooked = Object.values(updatedStatus).every(v => v !== 'unbooked');
+        if (allBooked && broadbandDiscount > 0) {
+          setSavedBroadbandDiscount(broadbandDiscount);
+          setSavedDiscountedMonthlyTotal(payMonthlyTotal);
+        }
+        return { ...prev, broadbandBookingStatus: updatedStatus };
+      });
+    };
+    window.addEventListener('appointment-booked', handler);
+    return () => window.removeEventListener('appointment-booked', handler);
+  }, [broadbandDiscount, payMonthlyTotal]);
+
   useEffect(() => {
     const init = async () => {
       const sessionId = localStorage.getItem('sessionId');
@@ -351,6 +462,8 @@ export default function CheckoutPage() {
                 discountedTotal={savedDiscountedTodayTotal ?? (appliedDeviceVoucher && deviceDiscount > 0 ? payTodayTotal : undefined)}
                 deviceDiscount={savedDeviceDiscount ?? deviceDiscount}
                 voucherName={savedDeviceVoucherName ?? appliedDeviceVoucher?.promotionName}
+                initialCardholderName={autofillCard?.cardholderName}
+                initialLast4={autofillCard?.last4Digits}
               />
             )}
             {session.hasBroadbandService && (
